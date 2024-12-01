@@ -1,0 +1,12 @@
+{
+    "version": "0.2.0",
+    "configurations": [
+        {
+            "name": "Car Park UI",
+            "type": "debugpy",
+            "request": "launch",
+            "program": "${workspaceFolder}/scripts/car_park_UI.py",
+            "console": "integratedTerminal"
+        }
+    ]
+}
