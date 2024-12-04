@@ -36,12 +36,10 @@ FPS = 120
 
 CAR_WIDTH, CAR_HEIGHT = 50, 30
 
-car_surface = pygame.Surface((CAR_WIDTH, CAR_HEIGHT), pygame.SRCALPHA)
-car_surface.fill(BLACK)
-
 
 class Environment:
     def __init__(self) -> None:
+        self.generate_car()
         self.env_reset()
         self.generate_obstacle_cars()
         self.car_acceleration = 0.2
@@ -52,6 +50,10 @@ class Environment:
         self.window_opened = False
         self.action_num = 0
         self.parked_tolerance_margin = 5
+
+    def generate_car(self):
+        self.car_surface = pygame.Surface((CAR_WIDTH, CAR_HEIGHT), pygame.SRCALPHA)
+        self.car_surface.fill(BLACK)
 
     def generate_obstacle_cars(self):
         self.obstacle_cars = [
@@ -87,16 +89,17 @@ class Environment:
         for obstacle in self.obstacle_cars:
             pygame.draw.rect(self.screen, RED, obstacle)
 
-        rotated_car = pygame.transform.rotate(car_surface, -self.car_angle)
+        rotated_car = pygame.transform.rotate(self.car_surface, -self.car_angle)
         car_rect = rotated_car.get_rect(center=(self.car_x, self.car_y))
         self.screen.blit(rotated_car, car_rect.topleft)
 
     def move_car(self, action):
-
         if action == 1:  # Accelerate
             self.car_speed = min(self.max_speed, self.car_speed + self.car_acceleration)
         elif action == 0:  # Brake
-            self.car_speed = max(-self.max_speed, self.car_speed - self.car_acceleration)
+            self.car_speed = max(
+                -self.max_speed, self.car_speed - self.car_acceleration
+            )
 
         if action == 3:
             self.car_angle += self.steering_angle if self.car_speed != 0 else 0
@@ -114,9 +117,17 @@ class Environment:
     def check_collision(self):
         """Check for collisions with obstacles or boundaries."""
         car_rect = pygame.Rect(
-            self.car_x - CAR_WIDTH // 2, self.car_y - CAR_HEIGHT // 2, CAR_WIDTH, CAR_HEIGHT
+            self.car_x - CAR_WIDTH // 2,
+            self.car_y - CAR_HEIGHT // 2,
+            CAR_WIDTH,
+            CAR_HEIGHT,
         )
-        if self.car_x < 0 or self.car_x > WIDTH or self.car_y < 0 or self.car_y > HEIGHT:
+        if (
+            self.car_x < 0
+            or self.car_x > WIDTH
+            or self.car_y < 0
+            or self.car_y > HEIGHT
+        ):
             return True
         for obstacle in self.obstacle_cars:
             if car_rect.colliderect(obstacle):
@@ -126,7 +137,10 @@ class Environment:
     def check_parking(self):
         """Check if the car is parked in the designated spot and centered inside."""
         car_rect = pygame.Rect(
-            self.car_x - CAR_WIDTH // 2, self.car_y - CAR_HEIGHT // 2, CAR_WIDTH, CAR_HEIGHT
+            self.car_x - CAR_WIDTH // 2,
+            self.car_y - CAR_HEIGHT // 2,
+            CAR_WIDTH,
+            CAR_HEIGHT,
         )
 
         parking_rect = pygame.Rect(
@@ -147,7 +161,8 @@ class Environment:
 
     def check_getting_closer(self):
         distance_to_parking_spot = math.sqrt(
-            (self.car_x - self.parking_spot_x) ** 2 + (self.car_y - self.parking_spot_y) ** 2
+            (self.car_x - self.parking_spot_x) ** 2
+            + (self.car_y - self.parking_spot_y) ** 2
         )
         if distance_to_parking_spot < current_car_parking_distance:
             current_car_parking_distance = distance_to_parking_spot
@@ -179,19 +194,25 @@ class Environment:
 
     def get_current_state(self):
         distance_to_parking_spot = math.sqrt(
-            (self.car_x - self.parking_spot_x) ** 2 + (self.car_y - self.parking_spot_y) ** 2
+            (self.car_x - self.parking_spot_x) ** 2
+            + (self.car_y - self.parking_spot_y) ** 2
         )
         angle_to_parking_spot = (
             math.degrees(
-                math.atan2(self.parking_spot_y - self.car_y, self.parking_spot_x - self.car_x)
+                math.atan2(
+                    self.parking_spot_y - self.car_y, self.parking_spot_x - self.car_x
+                )
             )
             - self.car_angle
         )
         max_distance = math.sqrt(WIDTH**2 + HEIGHT**2)
+
+        # we normalize the values before returning
         distance_to_parking_spot /= max_distance
         angle_to_parking_spot /= 360
+        car_speed = self.car_speed / self.max_speed
 
-        return [distance_to_parking_spot, angle_to_parking_spot, self.car_speed]
+        return [distance_to_parking_spot, angle_to_parking_spot, car_speed]
 
     def test_run(self, run_time_in_sec):
         self.env_reset()
@@ -202,7 +223,7 @@ class Environment:
         while running:
             if time.time() - start_time > run_time_in_sec:
                 running = False
-            
+
             random_action = random.randint(0, 3)
 
             self.move_car(random_action)
@@ -218,7 +239,7 @@ class Environment:
         pygame.quit()
         sys.exit()
 
-            
+
 if __name__ == "__main__":
     test_env = Environment()
     test_env.test_run(60)
