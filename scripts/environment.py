@@ -1,34 +1,29 @@
 import pygame
 import math
 import sys
+import time
+import random
 
-ACTIONS_MAPPING = {
-    "0": "left",
-    "1": "right",
-    "2": "up",
-    "3": "down"
-}
+ACTIONS_MAPPING = {"0": "left", "1": "right", "2": "up", "3": "down"}
 
 REWARDS = {
     "collision": -200,
     "parked": 200,
     "getting_closer": 1,
     "time_up": -500,
-    "else": -1
+    "else": -1,
 }
 
 ACTION_KEY_MAPPING = {
-        0: pygame.K_LEFT,
-        1: pygame.K_RIGHT,
-        2: pygame.K_UP,
-        3: pygame.K_DOWN
-    }
+    0: pygame.K_LEFT,
+    1: pygame.K_RIGHT,
+    2: pygame.K_UP,
+    3: pygame.K_DOWN,
+}
 
 pygame.init()
 
 WIDTH, HEIGHT = 800, 600
-
-ACTION_NUM = 0
 
 WHITE = (255, 255, 255)
 BLACK = (0, 0, 0)
@@ -36,204 +31,194 @@ GRAY = (200, 200, 200)
 RED = (255, 0, 0)
 GREEN = (0, 255, 0)
 
-clock = pygame.time.Clock()
+CLOCK = pygame.time.Clock()
 FPS = 120
 
 CAR_WIDTH, CAR_HEIGHT = 50, 30
 
-# Car parameters
-car_x, car_y = 100, 500
-car_angle = 0
-car_speed = 0
-car_acceleration = 0.2
-car_friction = 0.05
-max_speed = 5
-steering_angle = 3
-
-parking_spot_x, parking_spot_y = 400, 300
-
-current_car_parking_distance = math.inf
-
-# Obstacle cars
-obstacle_cars = [
-    pygame.Rect(400, 400, CAR_WIDTH, CAR_HEIGHT),
-    pygame.Rect(400, 350, CAR_WIDTH, CAR_HEIGHT),
-    pygame.Rect(400, 250, CAR_WIDTH, CAR_HEIGHT),
-    pygame.Rect(400, 200, CAR_WIDTH, CAR_HEIGHT),
-]
-
 car_surface = pygame.Surface((CAR_WIDTH, CAR_HEIGHT), pygame.SRCALPHA)
 car_surface.fill(BLACK)
 
-WINDOW_OPENED = False
 
-def generate_window():
-    global screen
-    screen = pygame.display.set_mode((WIDTH, HEIGHT))
-    pygame.display.set_caption("Parallel Parking Simulator")
+class Environment:
+    def __init__(self) -> None:
+        self.env_reset()
+        self.generate_obstacle_cars()
+        self.car_acceleration = 0.2
+        self.car_friction = 0.05
+        self.max_speed = 5
+        self.steering_angle = 3
+        self.parking_spot_x, self.parking_spot_y = 400, 300
+        self.window_opened = False
+        self.action_num = 0
+        self.parked_tolerance_margin = 5
 
-def draw_environment():
-    global WINDOW_OPENED, screen
-    if not WINDOW_OPENED:
-        generate_window()
-        WINDOW_OPENED = True
+    def generate_obstacle_cars(self):
+        self.obstacle_cars = [
+            pygame.Rect(400, 400, CAR_WIDTH, CAR_HEIGHT),
+            pygame.Rect(400, 350, CAR_WIDTH, CAR_HEIGHT),
+            pygame.Rect(400, 250, CAR_WIDTH, CAR_HEIGHT),
+            pygame.Rect(400, 200, CAR_WIDTH, CAR_HEIGHT),
+        ]
 
-    screen.fill(GRAY)
-    pygame.draw.rect(screen, GREEN, (parking_spot_x, parking_spot_y, CAR_WIDTH, CAR_HEIGHT), 2)
-    for obstacle in obstacle_cars:
-        pygame.draw.rect(screen, RED, obstacle)
+    def env_reset(self):
+        self.car_x, self.car_y = 100, 500
+        self.car_angle = 0
+        self.car_speed = 0
+        self.current_car_parking_distance = math.inf
+        pygame.event.clear()
 
-    rotated_car = pygame.transform.rotate(car_surface, -car_angle)
-    car_rect = rotated_car.get_rect(center=(car_x, car_y))
-    screen.blit(rotated_car, car_rect.topleft)
+    def generate_window(self):
+        self.screen = pygame.display.set_mode((WIDTH, HEIGHT))
+        pygame.display.set_caption("Parallel Parking Simulator")
 
-def move_car(action):
-    global car_x, car_y, car_angle, car_speed
+    def draw_environment(self):
+        if not self.window_opened:
+            self.generate_window()
+            self.window_opened = True
 
-    # Apply acceleration/braking
-    if action == 2:  # Accelerate
-        car_speed = min(max_speed, car_speed + car_acceleration)
-    elif action == 3:  # Brake
-        car_speed = max(-max_speed, car_speed - car_acceleration)
-    
-    # Apply steering
-    if action == 0:  # Steer left
-        car_angle += steering_angle if car_speed != 0 else 0
-    elif action == 1:  # Steer right
-        car_angle -= steering_angle if car_speed != 0 else 0
+        self.screen.fill(GRAY)
+        pygame.draw.rect(
+            self.screen,
+            GREEN,
+            (self.parking_spot_x, self.parking_spot_y, CAR_WIDTH, CAR_HEIGHT),
+            2,
+        )
+        for obstacle in self.obstacle_cars:
+            pygame.draw.rect(self.screen, RED, obstacle)
 
-    # Apply friction
-    car_speed *= (1 - car_friction)
+        rotated_car = pygame.transform.rotate(car_surface, -self.car_angle)
+        car_rect = rotated_car.get_rect(center=(self.car_x, self.car_y))
+        self.screen.blit(rotated_car, car_rect.topleft)
 
-    # Update position
-    rad = math.radians(car_angle)
-    car_x += car_speed * math.cos(rad)
-    car_y += car_speed * math.sin(rad)
+    def move_car(self, action):
 
+        if action == 1:  # Accelerate
+            self.car_speed = min(self.max_speed, self.car_speed + self.car_acceleration)
+        elif action == 0:  # Brake
+            self.car_speed = max(-self.max_speed, self.car_speed - self.car_acceleration)
 
-def check_collision():
-    """Check for collisions with obstacles or boundaries."""
-    car_rect = pygame.Rect(car_x - CAR_WIDTH // 2, car_y - CAR_HEIGHT // 2, CAR_WIDTH, CAR_HEIGHT)
-    if car_x < 0 or car_x > WIDTH or car_y < 0 or car_y > HEIGHT:
-        return True
-    for obstacle in obstacle_cars:
-        if car_rect.colliderect(obstacle):
+        if action == 3:
+            self.car_angle += self.steering_angle if self.car_speed != 0 else 0
+        elif action == 4:
+            self.car_angle -= self.steering_angle if self.car_speed != 0 else 0
+
+        # Apply friction
+        self.car_speed *= 1 - self.car_friction
+
+        # Update position
+        rad = math.radians(self.car_angle)
+        self.car_x += self.car_speed * math.cos(rad)
+        self.car_y += self.car_speed * math.sin(rad)
+
+    def check_collision(self):
+        """Check for collisions with obstacles or boundaries."""
+        car_rect = pygame.Rect(
+            self.car_x - CAR_WIDTH // 2, self.car_y - CAR_HEIGHT // 2, CAR_WIDTH, CAR_HEIGHT
+        )
+        if self.car_x < 0 or self.car_x > WIDTH or self.car_y < 0 or self.car_y > HEIGHT:
             return True
-    return False
+        for obstacle in self.obstacle_cars:
+            if car_rect.colliderect(obstacle):
+                return True
+        return False
 
-def check_parking():
-    """Check if the car is parked in the designated spot and centered inside."""
-    car_rect = pygame.Rect(car_x - CAR_WIDTH // 2, car_y - CAR_HEIGHT // 2, CAR_WIDTH, CAR_HEIGHT)
-    
-    # Define parking spot rectangle
-    parking_rect = pygame.Rect(parking_spot_x, parking_spot_y, CAR_WIDTH, CAR_HEIGHT)
+    def check_parking(self):
+        """Check if the car is parked in the designated spot and centered inside."""
+        car_rect = pygame.Rect(
+            self.car_x - CAR_WIDTH // 2, self.car_y - CAR_HEIGHT // 2, CAR_WIDTH, CAR_HEIGHT
+        )
 
-    # Check if the car's center is inside the parking spot
-    car_center = car_rect.center
-    parking_center = parking_rect.center
+        parking_rect = pygame.Rect(
+            self.parking_spot_x, self.parking_spot_y, CAR_WIDTH, CAR_HEIGHT
+        )
 
-    # You can define a margin if you want a little tolerance for perfect parking
-    margin = 5  # Pixel margin for tolerance
+        # Check if the car's center is inside the parking spot
+        car_center = car_rect.center
+        parking_center = parking_rect.center
 
-    # Check if the car's center is within the parking spot's center with some margin
-    if (abs(car_center[0] - parking_center[0]) <= margin and
-        abs(car_center[1] - parking_center[1]) <= margin):
-        return True
-    return False
+        # Check if the car's center is within the parking spot's center with some margin
+        if (
+            abs(car_center[0] - parking_center[0]) <= self.parked_tolerance_margin
+            and abs(car_center[1] - parking_center[1]) <= self.parked_tolerance_margin
+        ):
+            return True
+        return False
 
+    def check_getting_closer(self):
+        distance_to_parking_spot = math.sqrt(
+            (self.car_x - self.parking_spot_x) ** 2 + (self.car_y - self.parking_spot_y) ** 2
+        )
+        if distance_to_parking_spot < current_car_parking_distance:
+            current_car_parking_distance = distance_to_parking_spot
+            return True
+        return False
 
-def check_getting_closer():
-    global current_car_parking_distance
-    distance_to_parking_spot = math.sqrt((car_x - parking_spot_x)**2 + (car_y - parking_spot_y)**2)
-    if distance_to_parking_spot < current_car_parking_distance:
-        current_car_parking_distance = distance_to_parking_spot
-        return True
-    return False
+    def execute_move(self, action):
+        """Execute the given action, return (done, reward, next_state)."""
+        # Update the car's state based on the action
+        self.move_car(action)
 
+        # Get the updated state
+        state = self.get_current_state()
 
-def check_time_up():
-    global ACTION_NUM
-    return( ACTION_NUM > 5000)
+        # Collision detection
+        if self.check_collision():
+            return True, REWARDS["collision"], state
 
+        # Parking success
+        if self.check_parking():
+            return True, REWARDS["parked"], state
 
-def execute_move(action):
-    """Execute the given action, return (done, reward, next_state)."""
-    global ACTION_NUM, current_car_parking_distance
+        # Reward for getting closer to the parking spot
+        if self.check_getting_closer():
+            return False, REWARDS["getting_closer"], state
 
-    # Update the car's state based on the action
-    move_car(action)
+        # Default penalty for no progress
+        return False, REWARDS["else"], state
 
-    # Get the updated state
-    state = get_current_state()
+    def get_current_state(self):
+        distance_to_parking_spot = math.sqrt(
+            (self.car_x - self.parking_spot_x) ** 2 + (self.car_y - self.parking_spot_y) ** 2
+        )
+        angle_to_parking_spot = (
+            math.degrees(
+                math.atan2(self.parking_spot_y - self.car_y, self.parking_spot_x - self.car_x)
+            )
+            - self.car_angle
+        )
+        max_distance = math.sqrt(WIDTH**2 + HEIGHT**2)
+        distance_to_parking_spot /= max_distance
+        angle_to_parking_spot /= 360
 
-    # Increment action counter
-    ACTION_NUM += 1
+        return [distance_to_parking_spot, angle_to_parking_spot, self.car_speed]
 
-    # Check if time limit is reached
-    # if check_time_up():
-    #     return True, REWARDS["time_up"], state
+    def test_run(self, run_time_in_sec):
+        self.env_reset()
 
-    # Collision detection
-    if check_collision():
-        return True, REWARDS["collision"], state
+        running = True
+        start_time = time.time()
 
-    # Parking success
-    if check_parking():
-        return True, REWARDS["parked"], state
+        while running:
+            if time.time() - start_time > run_time_in_sec:
+                running = False
+            
+            random_action = random.randint(0, 3)
 
-    # Reward for getting closer to the parking spot
-    if check_getting_closer():
-        return False, REWARDS["getting_closer"], state
+            self.move_car(random_action)
 
-    # Default penalty for no progress
-    return False, REWARDS["else"], state
-
-
-
-def get_current_state():
-    distance_to_parking_spot = math.sqrt((car_x - parking_spot_x)**2 + (car_y - parking_spot_y)**2)
-    angle_to_parking_spot = math.degrees(math.atan2(parking_spot_y - car_y, parking_spot_x - car_x)) - car_angle
-    max_distance = math.sqrt(WIDTH**2 + HEIGHT**2)
-    distance_to_parking_spot /= max_distance
-    angle_to_parking_spot /= 360
-
-    return [distance_to_parking_spot, angle_to_parking_spot, car_speed]
-
-
-def reset():
-    global car_x, car_y, car_angle, car_speed, current_car_parking_distance, ACTION_NUM
-    car_x, car_y = 100, 500
-    car_angle = 0
-    car_speed = 0
-    current_car_parking_distance = math.inf
-    ACTION_NUM = 0
-    pygame.event.clear()
-
-
-def test_run():
-    # Main game loop
-    running = True
-    while running:
-        keys = pygame.key.get_pressed()
-
-        for event in pygame.event.get():
-            if event.type == pygame.QUIT:
+            if self.check_collision() or self.check_parking():
                 running = False
 
-        move_car(keys)
+            self.draw_environment()
+            pygame.display.flip()
 
-        if check_collision():
-            print("Collision! Resetting car position...")
-            car_x, car_y, car_angle, car_speed = 100, 500, 0, 0
+            CLOCK.tick(FPS)
 
-        if check_parking():
-            print("Car parked successfully!")
-            running = False
+        pygame.quit()
+        sys.exit()
 
-        # Draw everything
-        draw_environment()
-        pygame.display.flip()
-        clock.tick(FPS)
-
-    pygame.quit()
-    sys.exit()
+            
+if __name__ == "__main__":
+    test_env = Environment()
+    test_env.test_run(60)

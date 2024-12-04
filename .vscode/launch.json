@@ -2,6 +2,13 @@
     "version": "0.2.0",
     "configurations": [
         {
+            "name": "Environment test run",
+            "type": "debugpy",
+            "request": "launch",
+            "program": "${workspaceFolder}/scripts/environment.py",
+            "console": "integratedTerminal"
+        },
+        {
             "name": "Car Park UI",
             "type": "debugpy",
             "request": "launch",
