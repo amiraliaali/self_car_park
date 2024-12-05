@@ -4,21 +4,20 @@ import sys
 import time
 import random
 
-ACTIONS_MAPPING = {"0": "left", "1": "right", "2": "up", "3": "down"}
-
-REWARDS = {
-    "collision": -200,
-    "parked": 200,
-    "getting_closer": 1,
-    "time_up": -500,
-    "else": -1,
+ACTIONS_MAPPING = {
+    "0": "Accelerate straight",
+    "1": "Accelerate left",
+    "2": "Accelerate right",
+    "3": "Decelerate",
+    "4": "Brake left",
+    "5": "Brake right",
+    "6": "Do nothing",
 }
 
-ACTION_KEY_MAPPING = {
-    0: pygame.K_LEFT,
-    1: pygame.K_RIGHT,
-    2: pygame.K_UP,
-    3: pygame.K_DOWN,
+REWARDS = {
+    "collision": -10,
+    "parked": 50,
+    "time_up": -2,
 }
 
 pygame.init()
@@ -40,16 +39,16 @@ CAR_WIDTH, CAR_HEIGHT = 50, 30
 class Environment:
     def __init__(self) -> None:
         self.generate_car()
-        self.env_reset()
         self.generate_obstacle_cars()
         self.car_acceleration = 0.2
         self.car_friction = 0.05
         self.max_speed = 5
         self.steering_angle = 3
-        self.parking_spot_x, self.parking_spot_y = 400, 300
+        self.parking_spot_x, self.parking_spot_y = 100, 300
         self.window_opened = False
         self.action_num = 0
-        self.parked_tolerance_margin = 5
+        self.parked_tolerance_margin = 10
+        self.env_reset()
 
     def generate_car(self):
         self.car_surface = pygame.Surface((CAR_WIDTH, CAR_HEIGHT), pygame.SRCALPHA)
@@ -57,18 +56,20 @@ class Environment:
 
     def generate_obstacle_cars(self):
         self.obstacle_cars = [
-            pygame.Rect(400, 400, CAR_WIDTH, CAR_HEIGHT),
-            pygame.Rect(400, 350, CAR_WIDTH, CAR_HEIGHT),
-            pygame.Rect(400, 250, CAR_WIDTH, CAR_HEIGHT),
-            pygame.Rect(400, 200, CAR_WIDTH, CAR_HEIGHT),
+            # pygame.Rect(400, 400, CAR_WIDTH, CAR_HEIGHT),
+            # pygame.Rect(400, 350, CAR_WIDTH, CAR_HEIGHT),
+            # pygame.Rect(400, 250, CAR_WIDTH, CAR_HEIGHT),
+            # pygame.Rect(400, 200, CAR_WIDTH, CAR_HEIGHT),
         ]
 
     def env_reset(self):
-        self.car_x, self.car_y = 100, 500
+        self.car_x, self.car_y = random.randint(50, 100), random.randint(50, 500)
         self.car_angle = 0
         self.car_speed = 0
         self.current_car_parking_distance = math.inf
+        self.total_moves = 0
         pygame.event.clear()
+        return self.get_current_state()
 
     def generate_window(self):
         self.screen = pygame.display.set_mode((WIDTH, HEIGHT))
@@ -94,25 +95,21 @@ class Environment:
         self.screen.blit(rotated_car, car_rect.topleft)
 
     def move_car(self, action):
-        if action == 1:  # Accelerate
+        if action in [0, 1, 2]:  # Accelerate
             self.car_speed = min(self.max_speed, self.car_speed + self.car_acceleration)
-        elif action == 0:  # Brake
-            self.car_speed = max(
-                -self.max_speed, self.car_speed - self.car_acceleration
-            )
+        elif action in [3, 4, 5]:  # Decelerate
+            self.car_speed = max(-self.max_speed, self.car_speed - self.car_acceleration)
 
-        if action == 3:
-            self.car_angle += self.steering_angle if self.car_speed != 0 else 0
-        elif action == 4:
-            self.car_angle -= self.steering_angle if self.car_speed != 0 else 0
+        if action in [1, 4]:  # Left
+            self.car_angle += self.steering_angle
+        elif action in [2, 5]:  # Right
+            self.car_angle -= self.steering_angle
 
-        # Apply friction
         self.car_speed *= 1 - self.car_friction
-
-        # Update position
         rad = math.radians(self.car_angle)
         self.car_x += self.car_speed * math.cos(rad)
         self.car_y += self.car_speed * math.sin(rad)
+
 
     def check_collision(self):
         """Check for collisions with obstacles or boundaries."""
@@ -164,18 +161,45 @@ class Environment:
             (self.car_x - self.parking_spot_x) ** 2
             + (self.car_y - self.parking_spot_y) ** 2
         )
-        if distance_to_parking_spot < current_car_parking_distance:
-            current_car_parking_distance = distance_to_parking_spot
+        if distance_to_parking_spot < self.current_car_parking_distance:
+            self.current_car_parking_distance = distance_to_parking_spot
             return True
         return False
+
+    def calculate_distance_reward(self):
+        distance_to_parking_spot = math.sqrt(
+            (self.car_x - self.parking_spot_x) ** 2
+            + (self.car_y - self.parking_spot_y) ** 2
+        )
+        max_distance = math.sqrt(WIDTH**2 + HEIGHT**2)
+        normalized_distance = distance_to_parking_spot / max_distance
+
+        # Angle alignment reward
+        angle_to_parking_spot = math.atan2(
+            self.parking_spot_y - self.car_y, self.parking_spot_x - self.car_x
+        )
+        angle_diff = abs(math.degrees(angle_to_parking_spot) - self.car_angle) % 360
+        angle_diff = min(angle_diff, 360 - angle_diff)  # Normalize to [0, 180]
+
+        alignment_reward = 1 - (
+            angle_diff / 180
+        )  # Reward is higher for better alignment
+
+        # Combine rewards
+        reward = 1 / (math.e ** (normalized_distance / 0.2)) -0.5 + 2 * alignment_reward
+        return reward
 
     def execute_move(self, action):
         """Execute the given action, return (done, reward, next_state)."""
         # Update the car's state based on the action
         self.move_car(action)
 
+        reward = self.calculate_distance_reward()
+
         # Get the updated state
         state = self.get_current_state()
+
+        self.total_moves += 1
 
         # Collision detection
         if self.check_collision():
@@ -183,36 +207,36 @@ class Environment:
 
         # Parking success
         if self.check_parking():
+            print("parked succesfully")
             return True, REWARDS["parked"], state
 
-        # Reward for getting closer to the parking spot
-        if self.check_getting_closer():
-            return False, REWARDS["getting_closer"], state
+        if self.total_moves > 3000:
+            self.total_moves = 0
+            return True, REWARDS["time_up"], state
 
         # Default penalty for no progress
-        return False, REWARDS["else"], state
+        return False, reward, state
 
     def get_current_state(self):
-        distance_to_parking_spot = math.sqrt(
-            (self.car_x - self.parking_spot_x) ** 2
-            + (self.car_y - self.parking_spot_y) ** 2
-        )
-        angle_to_parking_spot = (
-            math.degrees(
+        return [
+            (self.car_x - self.parking_spot_x) / WIDTH,
+            (self.car_y - self.parking_spot_y) / HEIGHT,
+            math.sqrt(
+                (self.car_x - self.parking_spot_x) ** 2
+                + (self.car_y - self.parking_spot_y) ** 2
+            )
+            / math.sqrt(WIDTH**2 + HEIGHT**2),
+            (
                 math.atan2(
                     self.parking_spot_y - self.car_y, self.parking_spot_x - self.car_x
                 )
+                - math.radians(self.car_angle)
             )
-            - self.car_angle
-        )
-        max_distance = math.sqrt(WIDTH**2 + HEIGHT**2)
-
-        # we normalize the values before returning
-        distance_to_parking_spot /= max_distance
-        angle_to_parking_spot /= 360
-        car_speed = self.car_speed / self.max_speed
-
-        return [distance_to_parking_spot, angle_to_parking_spot, car_speed]
+            / math.pi,  # Angle difference normalized
+            self.car_speed / self.max_speed,
+            self.car_angle / 360,
+            # Add other features as needed
+        ]
 
     def test_run(self, run_time_in_sec):
         self.env_reset()

@@ -12,61 +12,65 @@ class CarParkUI(CarPark):
         super().__init__()
 
     def test_run(self, training_episodes):
-        self.train_deep_sarsa(episodes=training_episodes)
+        print("Starting training...")
+        self.train_actor_critic(episodes=training_episodes)
+        print("Training completed. Running test agent...")
         self.show_test_agent()
 
     def show_test_agent(self):
-        env.reset()
-        
-        # Initialize OpenCV video writer
-        # Set video properties like frame width, height, and frame rate
-        frame_width, frame_height = env.WIDTH, env.HEIGHT  # Define your window size
-        fourcc = cv.VideoWriter_fourcc(*'H264')  # Use H264 codec for MP4
+        self.environment_inst.env_reset()
+
+        # Video writer setup
+        frame_width, frame_height = env.WIDTH, env.HEIGHT
+        fourcc = cv.VideoWriter_fourcc(*'H264')  # Codec for MP4
         out = cv.VideoWriter('output_video.mp4', fourcc, env.FPS, (frame_width, frame_height))
 
         running = True
         start_time = time.time()
 
         while running:
-            if time.time() - start_time > 10:  # Run for 10 seconds
+            if time.time() - start_time > 30:  # Run for 30 seconds
                 running = False
 
-            state = torch.FloatTensor(env.get_current_state()) 
-            av = self.q_network(state).detach()
-            action = torch.argmax(av, dim=-1, keepdim=False).unsqueeze(0).item()
+            # Get current state and ensure it's valid
+            state = self.environment_inst.get_current_state()
+            state = torch.FloatTensor(state).unsqueeze(0)
 
-            # keys = env.ACTION_KEY_MAPPING[action]
-            # pygame.event.post(pygame.event.Event(pygame.KEYDOWN, {'key': keys}))
-            # pygame.event.post(pygame.event.Event(pygame.KEYUP, {'key': keys}))
+            # Use policy network for action selection
+            with torch.no_grad():
+                action_probs, _ = self.model(state)
+                action = torch.argmax(action_probs).item()
 
-            # for event in pygame.event.get():
-            #     if event.type == pygame.QUIT:
-            #         running = False
+            # Execute the action
+            self.environment_inst.move_car(action)
 
-            env.move_car(action)
-
-            if env.check_collision() or env.check_parking():
+            # Check for terminal conditions
+            if self.environment_inst.check_collision() or self.environment_inst.check_parking():
                 running = False
 
-            # Draw everything
-            env.draw_environment()
+            # Draw environment in pygame
+            self.environment_inst.draw_environment()
             pygame.display.flip()
 
-            # Capture the current screen
-            frame = pygame.surfarray.array3d(pygame.display.get_surface())  # Convert surface to numpy array
-            frame = np.transpose(frame, (1, 0, 2))  # Convert from (width, height, channels) to (height, width, channels)
+            # Capture the current screen for the video
+            frame = pygame.surfarray.array3d(pygame.display.get_surface())
+            frame = np.transpose(frame, (1, 0, 2))  # (width, height, channels) -> (height, width, channels)
             frame = cv.cvtColor(frame, cv.COLOR_RGB2BGR)  # Convert RGB to BGR for OpenCV
-
-            # Write the frame to the video file
             out.write(frame)
 
-            env.clock.tick(env.FPS)
+            env.CLOCK.tick(env.FPS)
 
-        # Release the video writer and clean up
+        # Clean up
+        print("Simulation complete. Saving video.")
         out.release()
         pygame.quit()
         sys.exit()
 
 if __name__ == "__main__":
     cp = CarParkUI()
-    cp.test_run(100)
+    print("Starting training...")
+    cp.train_actor_critic(episodes=50)
+    print("Training completed. Running test agent...")
+    # cp.load_model()
+    cp.save_model()
+    cp.show_test_agent()
