@@ -5,6 +5,7 @@ import time
 import random
 import cv2 as cv
 import numpy as np
+from car import Car
 
 ACTIONS_MAPPING = {
     "0": "Accelerate straight",
@@ -33,9 +34,7 @@ RED = (255, 0, 0)
 GREEN = (0, 255, 0)
 
 CLOCK = pygame.time.Clock()
-FPS = 120
-
-CAR_WIDTH, CAR_HEIGHT = 50, 30
+FPS = 30
 
 
 class Environment:
@@ -43,10 +42,6 @@ class Environment:
         self.generate_car()
         self.generate_obstacle_cars()
         self.iteration_num = 0
-        self.car_acceleration = 0.2
-        self.car_friction = 0.05
-        self.max_speed = 5
-        self.steering_angle = 7
         self.parking_spot_x, self.parking_spot_y = 300, 300
         self.window_opened = False
         self.action_num = 0
@@ -55,7 +50,10 @@ class Environment:
         self.all_actions_current_run = list()
 
     def generate_car(self):
-        self.car_surface = pygame.Surface((CAR_WIDTH, CAR_HEIGHT), pygame.SRCALPHA)
+        self.car_agent = Car(50, 400)
+        self.car_surface = pygame.Surface(
+            (self.car_agent.width, self.car_agent.height), pygame.SRCALPHA
+        )
         self.car_surface.fill(BLACK)
 
     def generate_obstacle_cars(self):
@@ -69,9 +67,7 @@ class Environment:
     def env_reset(self, reset_actions_list=True):
         # self.car_x, self.car_y = random.randint(50, 100), random.randint(50, 500)
         pygame.init()
-        self.car_x, self.car_y = 50, 400
-        self.car_angle = 0
-        self.car_speed = 0
+        self.car_agent.reset()
         self.current_car_parking_distance = math.inf
         self.total_moves = 0
         pygame.event.clear()
@@ -93,47 +89,45 @@ class Environment:
         pygame.draw.rect(
             self.screen,
             GREEN,
-            (self.parking_spot_x, self.parking_spot_y, CAR_WIDTH, CAR_HEIGHT),
+            (
+                self.parking_spot_x,
+                self.parking_spot_y,
+                self.car_agent.width,
+                self.car_agent.height,
+            ),
             2,
         )
         for obstacle in self.obstacle_cars:
             pygame.draw.rect(self.screen, RED, obstacle)
 
-        rotated_car = pygame.transform.rotate(self.car_surface, -self.car_angle)
-        car_rect = rotated_car.get_rect(center=(self.car_x, self.car_y))
+        rotated_car = pygame.transform.rotate(self.car_surface, -self.car_agent.angle)
+        car_rect = rotated_car.get_rect(center=(self.car_agent.x, self.car_agent.y))
         self.screen.blit(rotated_car, car_rect.topleft)
 
     def move_car(self, action):
-        if action in [0, 1, 2]:  # Accelerate
-            self.car_speed = min(self.max_speed, self.car_speed + self.car_acceleration)
-        elif action in [3, 4, 5]:  # Decelerate
-            self.car_speed = max(-self.max_speed, self.car_speed - self.car_acceleration)
+        if action == 0:  # Accelerate
+            self.car_agent.increase_speed()
 
-        if action in [1, 4]:  # Left
-            self.car_angle += self.steering_angle
-        elif action in [2, 5]:  # Right
-            self.car_angle -= self.steering_angle
+        elif action == 1:  # Decelerate
+            self.car_agent.decrease_speed()
 
-        self.car_speed *= 1 - self.car_friction
-        rad = math.radians(self.car_angle)
-        self.car_x += self.car_speed * math.cos(rad)
-        self.car_y += self.car_speed * math.sin(rad)
+        elif action == 2:  # Left
+            self.car_agent.steer_left()
 
+        else:  # Right
+            self.car_agent.steer_right()
+
+        self.car_agent.update()
 
     def check_collision(self):
         """Check for collisions with obstacles or boundaries."""
         car_rect = pygame.Rect(
-            self.car_x - CAR_WIDTH // 2,
-            self.car_y - CAR_HEIGHT // 2,
-            CAR_WIDTH,
-            CAR_HEIGHT,
+            self.car_agent.x - self.car_agent.width // 2,
+            self.car_agent.y - self.car_agent.height // 2,
+            self.car_agent.width,
+            self.car_agent.height,
         )
-        if (
-            self.car_x < 0
-            or self.car_x > WIDTH
-            or self.car_y < 0
-            or self.car_y > HEIGHT
-        ):
+        if self.car_agent.boundary_collision(WIDTH, HEIGHT):
             return True
         for obstacle in self.obstacle_cars:
             if car_rect.colliderect(obstacle):
@@ -142,57 +136,44 @@ class Environment:
 
     def check_parking(self):
         """Check if the car is parked in the designated spot and centered inside."""
-        car_rect = pygame.Rect(
-            self.car_x - CAR_WIDTH // 2,
-            self.car_y - CAR_HEIGHT // 2,
-            CAR_WIDTH,
-            CAR_HEIGHT,
+        return self.car_agent.check_parking(
+            self.parking_spot_x, self.parking_spot_y, self.parked_tolerance_margin
         )
-
-        parking_rect = pygame.Rect(
-            self.parking_spot_x, self.parking_spot_y, CAR_WIDTH, CAR_HEIGHT
-        )
-
-        # Check if the car's center is inside the parking spot
-        car_center = car_rect.center
-        parking_center = parking_rect.center
-
-        # Check if the car's center is within the parking spot's center with some margin
-        if (
-            abs(car_center[0] - parking_center[0]) <= self.parked_tolerance_margin
-            and abs(car_center[1] - parking_center[1]) <= self.parked_tolerance_margin
-        ):
-            return True
-        return False
 
     def check_getting_closer(self):
-        distance_to_parking_spot = math.sqrt(
-            (self.car_x - self.parking_spot_x) ** 2
-            + (self.car_y - self.parking_spot_y) ** 2
+        """Check if the car is getting closer to the parking spot."""
+        distance_to_parking = self.car_agent.distance_to_parking(
+            self.parking_spot_x, self.parking_spot_y
         )
-        if distance_to_parking_spot < self.current_car_parking_distance:
-            self.current_car_parking_distance = distance_to_parking_spot
+
+        if distance_to_parking < self.current_car_parking_distance:
+            self.current_car_parking_distance = distance_to_parking
             return True
         return False
 
     def calculate_distance_reward(self):
-        distance_to_parking_spot = math.sqrt((self.car_x - self.parking_spot_x)**2 + (self.car_y - self.parking_spot_y)**2)
-        max_distance = math.sqrt(WIDTH**2 + HEIGHT**2)
-        distance_reward = 1 - (distance_to_parking_spot / max_distance)
+        """Calculate the reward based on the distance to the parking spot."""
+        distance_to_parking = self.car_agent.distance_to_parking(
+            self.parking_spot_x, self.parking_spot_y
+        )
 
-        angle_to_parking_spot = math.atan2(self.parking_spot_y - self.car_y, self.parking_spot_x - self.car_x)
-        angle_diff = abs(math.degrees(angle_to_parking_spot) - self.car_angle) % 360
-        angle_reward = 1 - (angle_diff / 180)
+        angle_to_parking = self.car_agent.angle_to_parking(
+            self.parking_spot_x, self.parking_spot_y
+        )
 
-        reward = distance_reward + 0.5 * angle_reward
+        reward = math.exp(3 - 0.2 * distance_to_parking) - 5
         return reward
 
-
     def generate_video_current_run(self):
-        self.env_reset(reset_actions_list = False)
+        self.env_reset(reset_actions_list=False)
         frame_width, frame_height = WIDTH, HEIGHT
-        fourcc = cv.VideoWriter_fourcc(*'H264')  # Codec for MP4
-        out = cv.VideoWriter(f'output_video_{self.iteration_num}.mp4', fourcc, FPS, (frame_width, frame_height))
+        fourcc = cv.VideoWriter_fourcc(*"H264")  # Codec for MP4
+        out = cv.VideoWriter(
+            f"output_video_{self.iteration_num}.mp4",
+            fourcc,
+            FPS,
+            (frame_width, frame_height),
+        )
 
         for i in self.all_actions_current_run:
             state = self.get_current_state()
@@ -205,8 +186,12 @@ class Environment:
 
             # Capture the current screen for the video
             frame = pygame.surfarray.array3d(pygame.display.get_surface())
-            frame = np.transpose(frame, (1, 0, 2))  # (width, height, channels) -> (height, width, channels)
-            frame = cv.cvtColor(frame, cv.COLOR_RGB2BGR)  # Convert RGB to BGR for OpenCV
+            frame = np.transpose(
+                frame, (1, 0, 2)
+            )  # (width, height, channels) -> (height, width, channels)
+            frame = cv.cvtColor(
+                frame, cv.COLOR_RGB2BGR
+            )  # Convert RGB to BGR for OpenCV
             out.write(frame)
 
             CLOCK.tick(FPS)
@@ -241,29 +226,17 @@ class Environment:
         if self.total_moves > 3000:
             self.total_moves = 0
             return True, REWARDS["time_up"], state
-        
+
         # Default penalty for no progress
         return False, reward, state
 
     def get_current_state(self):
         return [
-            (self.car_x - self.parking_spot_x) / WIDTH,
-            (self.car_y - self.parking_spot_y) / HEIGHT,
-            math.sqrt(
-                (self.car_x - self.parking_spot_x) ** 2
-                + (self.car_y - self.parking_spot_y) ** 2
-            )
-            / math.sqrt(WIDTH**2 + HEIGHT**2),
-            (
-                math.atan2(
-                    self.parking_spot_y - self.car_y, self.parking_spot_x - self.car_x
-                )
-                - math.radians(self.car_angle)
-            )
-            / math.pi,  # Angle difference normalized
-            self.car_speed / self.max_speed,
-            self.car_angle / 360,
-            # Add other features as needed
+            self.car_agent.x,
+            self.car_agent.y,
+            self.car_agent.angle,
+            self.parking_spot_x,
+            self.parking_spot_y,
         ]
 
     def test_run(self, run_time_in_sec):
@@ -277,6 +250,7 @@ class Environment:
                 running = False
 
             random_action = random.randint(0, 3)
+            # random.choice(10*[0] + [3])
 
             self.move_car(random_action)
 
