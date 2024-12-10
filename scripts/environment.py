@@ -3,6 +3,8 @@ import math
 import sys
 import time
 import random
+import cv2 as cv
+import numpy as np
 
 ACTIONS_MAPPING = {
     "0": "Accelerate straight",
@@ -15,9 +17,9 @@ ACTIONS_MAPPING = {
 }
 
 REWARDS = {
-    "collision": -10,
-    "parked": 50,
-    "time_up": -2,
+    "collision": -2000,
+    "parked": 5000,
+    "time_up": -1000,
 }
 
 pygame.init()
@@ -40,15 +42,17 @@ class Environment:
     def __init__(self) -> None:
         self.generate_car()
         self.generate_obstacle_cars()
+        self.iteration_num = 0
         self.car_acceleration = 0.2
         self.car_friction = 0.05
         self.max_speed = 5
-        self.steering_angle = 3
-        self.parking_spot_x, self.parking_spot_y = 100, 300
+        self.steering_angle = 7
+        self.parking_spot_x, self.parking_spot_y = 300, 300
         self.window_opened = False
         self.action_num = 0
         self.parked_tolerance_margin = 10
         self.env_reset()
+        self.all_actions_current_run = list()
 
     def generate_car(self):
         self.car_surface = pygame.Surface((CAR_WIDTH, CAR_HEIGHT), pygame.SRCALPHA)
@@ -62,13 +66,18 @@ class Environment:
             # pygame.Rect(400, 200, CAR_WIDTH, CAR_HEIGHT),
         ]
 
-    def env_reset(self):
-        self.car_x, self.car_y = random.randint(50, 100), random.randint(50, 500)
+    def env_reset(self, reset_actions_list=True):
+        # self.car_x, self.car_y = random.randint(50, 100), random.randint(50, 500)
+        pygame.init()
+        self.car_x, self.car_y = 50, 400
         self.car_angle = 0
         self.car_speed = 0
         self.current_car_parking_distance = math.inf
         self.total_moves = 0
         pygame.event.clear()
+        if reset_actions_list:
+            self.all_actions_current_run = []
+            self.iteration_num += 1
         return self.get_current_state()
 
     def generate_window(self):
@@ -167,30 +176,48 @@ class Environment:
         return False
 
     def calculate_distance_reward(self):
-        distance_to_parking_spot = math.sqrt(
-            (self.car_x - self.parking_spot_x) ** 2
-            + (self.car_y - self.parking_spot_y) ** 2
-        )
+        distance_to_parking_spot = math.sqrt((self.car_x - self.parking_spot_x)**2 + (self.car_y - self.parking_spot_y)**2)
         max_distance = math.sqrt(WIDTH**2 + HEIGHT**2)
-        normalized_distance = distance_to_parking_spot / max_distance
+        distance_reward = 1 - (distance_to_parking_spot / max_distance)
 
-        # Angle alignment reward
-        angle_to_parking_spot = math.atan2(
-            self.parking_spot_y - self.car_y, self.parking_spot_x - self.car_x
-        )
+        angle_to_parking_spot = math.atan2(self.parking_spot_y - self.car_y, self.parking_spot_x - self.car_x)
         angle_diff = abs(math.degrees(angle_to_parking_spot) - self.car_angle) % 360
-        angle_diff = min(angle_diff, 360 - angle_diff)  # Normalize to [0, 180]
+        angle_reward = 1 - (angle_diff / 180)
 
-        alignment_reward = 1 - (
-            angle_diff / 180
-        )  # Reward is higher for better alignment
-
-        # Combine rewards
-        reward = 1 / (math.e ** (normalized_distance / 0.2)) -0.5 + 2 * alignment_reward
+        reward = distance_reward + 0.5 * angle_reward
         return reward
+
+
+    def generate_video_current_run(self):
+        self.env_reset(reset_actions_list = False)
+        frame_width, frame_height = WIDTH, HEIGHT
+        fourcc = cv.VideoWriter_fourcc(*'H264')  # Codec for MP4
+        out = cv.VideoWriter(f'output_video_{self.iteration_num}.mp4', fourcc, FPS, (frame_width, frame_height))
+
+        for i in self.all_actions_current_run:
+            state = self.get_current_state()
+            action = i
+            self.move_car(action)
+
+            # Draw environment in pygame
+            self.draw_environment()
+            pygame.display.flip()
+
+            # Capture the current screen for the video
+            frame = pygame.surfarray.array3d(pygame.display.get_surface())
+            frame = np.transpose(frame, (1, 0, 2))  # (width, height, channels) -> (height, width, channels)
+            frame = cv.cvtColor(frame, cv.COLOR_RGB2BGR)  # Convert RGB to BGR for OpenCV
+            out.write(frame)
+
+            CLOCK.tick(FPS)
+        print("Finished saving video!!")
+        out.release()
+        self.all_actions_current_run = []
+        self.screen.fill(GRAY)
 
     def execute_move(self, action):
         """Execute the given action, return (done, reward, next_state)."""
+        self.all_actions_current_run.append(action)
         # Update the car's state based on the action
         self.move_car(action)
 
@@ -208,12 +235,13 @@ class Environment:
         # Parking success
         if self.check_parking():
             print("parked succesfully")
+            self.generate_video_current_run()
             return True, REWARDS["parked"], state
 
         if self.total_moves > 3000:
             self.total_moves = 0
             return True, REWARDS["time_up"], state
-
+        
         # Default penalty for no progress
         return False, reward, state
 

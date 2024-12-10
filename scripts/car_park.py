@@ -11,34 +11,33 @@ class ActorCritic(nn.Module):
     def __init__(self, state_dim, action_dim):
         super(ActorCritic, self).__init__()
         # Shared base layers
-        self.shared = nn.Sequential(
+        self.actor_base = nn.Sequential(
             nn.Linear(state_dim, 128),
-            nn.LayerNorm(128),
+            # nn.LayerNorm(128),
+            nn.ReLU(),
+            nn.Linear(128, 256),
+            nn.ReLU(),
+            nn.Linear(256, 64),
             nn.ReLU(),
         )
         # Actor network
         self.actor = nn.Sequential(
-            nn.Linear(128, 128),
-            nn.LayerNorm(128),
-            nn.ReLU(),
-            nn.Linear(128, action_dim),
+            nn.Linear(64, action_dim),
             nn.Softmax(dim=-1),  # Outputs probabilities for actions
         )
         # Critic network
         self.critic = nn.Sequential(
-            nn.Linear(128, 256),
-            nn.LayerNorm(256),
+            nn.Linear(state_dim, 128),
             nn.ReLU(),
-            nn.Linear(256, 32),
-            nn.LayerNorm(32),
+            nn.Linear(128, 128),
             nn.ReLU(),
-            nn.Linear(32, 1),  # Outputs state value
+            nn.Linear(128, 1),  # Outputs state value
         )
 
     def forward(self, state):
-        base = self.shared(state)
-        action_probs = self.actor(base)
-        state_value = self.critic(base)
+        actor_base = self.actor_base(state)
+        action_probs = self.actor(actor_base)
+        state_value = self.critic(state)
         return action_probs, state_value
 
 
@@ -73,6 +72,7 @@ class CarPark:
     def train_actor_critic(self, episodes, gamma=0.99, update_every=5):
         stats = {"Loss": [], "Returns": []}
         progress_bar = tqdm(range(1, episodes + 1), desc="Training", leave=True)
+        epsilon = 1.0  # Initial epsilon for exploration
 
         for episode in progress_bar:
             state = self.environment_inst.env_reset()
@@ -80,7 +80,17 @@ class CarPark:
             ep_return = 0
 
             while not done:
-                action, log_prob = self.select_action(state)
+                # Epsilon-greedy action selection
+                epsilon = max(0.1, epsilon * 0.99)  # Epsilon decay
+                if np.random.rand() < epsilon:
+                    # Exploration: random action
+                    action = np.random.randint(0, self.num_actions)
+                    log_prob = torch.tensor([0.0])
+                else:
+                    # Exploitation: choose best action from the model
+                    action, log_prob = self.select_action(state)
+
+                # Execute the action in the environment
                 done, reward, next_state = self.environment_inst.execute_move(action)
 
                 # Push experience to replay memory
@@ -101,6 +111,7 @@ class CarPark:
                 progress_bar.set_description(f"Training (Avg Reward: {avg_return:.2f})")
 
         return stats
+
 
     def train_batch(self, gamma):
         # Sample a mini-batch from replay memory
@@ -126,9 +137,9 @@ class CarPark:
         advantages = targets - state_values.squeeze()
 
         # Actor loss (policy gradient)
-        action_log_probs = torch.stack(log_probs)
-        entropy = -torch.sum(action_probs * torch.log(action_probs + 1e-10), dim=1).mean()  # Entropy loss
-        actor_loss = -torch.sum(action_log_probs * advantages.detach()) - 0.01 * entropy  # Add entropy term
+        log_probs = torch.stack(log_probs)
+        entropy = -torch.sum(action_probs * torch.log(action_probs + 1e-10), dim=1).mean()
+        actor_loss = -log_probs * advantages - 0.01 * entropy
 
 
         # Critic loss (value function)
@@ -138,6 +149,7 @@ class CarPark:
 
         # Backpropagation
         self.optimizer.zero_grad()
+        loss = loss.mean()
         loss.backward()
         self.optimizer.step()
 
