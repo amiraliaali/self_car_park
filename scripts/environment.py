@@ -6,6 +6,7 @@ import random
 import cv2 as cv
 import numpy as np
 from car import Car
+import matplotlib.pyplot as plt
 
 ACTIONS_MAPPING = {
     "0": "Accelerate straight",
@@ -48,6 +49,8 @@ class Environment:
         self.parked_tolerance_margin = 10
         self.env_reset()
         self.all_actions_current_run = list()
+        self.gaussian_reward_plane = self.create_gaussian_plane()
+        self.save_gaussian_graph()
 
     def generate_car(self):
         self.car_agent = Car(50, 400)
@@ -55,6 +58,34 @@ class Environment:
             (self.car_agent.width, self.car_agent.height), pygame.SRCALPHA
         )
         self.car_surface.fill(BLACK)
+
+    def create_gaussian_plane(self):
+        # Generate coordinate grid
+        x = np.arange(0, WIDTH, 1)
+        y = np.arange(0, HEIGHT, 1)
+        x, y = np.meshgrid(x, y)
+
+        # Define Gaussian parameters
+        mu_x = self.parking_spot_x
+        mu_y = self.parking_spot_y
+        sigma_x = WIDTH / 10  
+        sigma_y = HEIGHT / 10  
+
+        # Compute Gaussian distribution
+        gaussian = 10 * np.exp(
+            -(((x - mu_x) ** 2) / (2 * sigma_x ** 2) + ((y - mu_y) ** 2) / (2 * sigma_y ** 2))
+        ) - 6
+        return gaussian
+    
+    def save_gaussian_graph(self, filename="gaussian_reward_graph.png"):
+        plt.figure(figsize=(8, 6))
+        plt.imshow(self.gaussian_reward_plane, extent=[0, WIDTH, 0, HEIGHT], origin='lower', cmap='viridis')
+        plt.colorbar(label="Intensity")
+        plt.title("Gaussian Distribution")
+        plt.xlabel("X-axis")
+        plt.ylabel("Y-axis")
+        plt.savefig(filename)
+        plt.close()
 
     def generate_obstacle_cars(self):
         self.obstacle_cars = [
@@ -152,16 +183,9 @@ class Environment:
         return False
 
     def calculate_distance_reward(self):
-        """Calculate the reward based on the distance to the parking spot."""
-        distance_to_parking = self.car_agent.distance_to_parking(
-            self.parking_spot_x, self.parking_spot_y
-        )
-
-        angle_to_parking = self.car_agent.angle_to_parking(
-            self.parking_spot_x, self.parking_spot_y
-        )
-
-        reward = math.exp(3 - 0.2 * distance_to_parking) - 5
+        """Calculates the reward based on the position in the gaussian plane."""
+        x, y = self.car_agent.x, self.car_agent.y
+        reward = self.gaussian_reward_plane[int(x), int(y)]
         return reward
 
     def generate_video_current_run(self):
