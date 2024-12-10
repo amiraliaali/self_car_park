@@ -19,9 +19,9 @@ ACTIONS_MAPPING = {
 }
 
 REWARDS = {
-    "collision": -2000,
-    "parked": 5000,
-    "time_up": -1000,
+    "collision": -20,
+    "parked": 50,
+    "time_up": -10,
 }
 
 pygame.init()
@@ -72,9 +72,9 @@ class Environment:
         sigma_y = HEIGHT / 10  
 
         # Compute Gaussian distribution
-        gaussian = 10 * np.exp(
+        gaussian = np.exp(
             -(((x - mu_x) ** 2) / (2 * sigma_x ** 2) + ((y - mu_y) ** 2) / (2 * sigma_y ** 2))
-        ) - 6
+        ) - 0.6
         return gaussian
     
     def save_gaussian_graph(self, filename="gaussian_reward_graph.png"):
@@ -247,7 +247,7 @@ class Environment:
             self.generate_video_current_run()
             return True, REWARDS["parked"], state
 
-        if self.total_moves > 3000:
+        if self.total_moves > 6000:
             self.total_moves = 0
             return True, REWARDS["time_up"], state
 
