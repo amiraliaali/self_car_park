@@ -19,9 +19,9 @@ ACTIONS_MAPPING = {
 }
 
 REWARDS = {
-    "collision": -20,
-    "parked": 50,
-    "time_up": -10,
+    "collision": -1000,
+    "parked": 1000,
+    "time_up": -1000,
 }
 
 pygame.init()
@@ -35,7 +35,7 @@ RED = (255, 0, 0)
 GREEN = (0, 255, 0)
 
 CLOCK = pygame.time.Clock()
-FPS = 30
+FPS = 60
 
 
 class Environment:
@@ -68,13 +68,13 @@ class Environment:
         # Define Gaussian parameters
         mu_x = self.parking_spot_x
         mu_y = self.parking_spot_y
-        sigma_x = WIDTH / 10  
-        sigma_y = HEIGHT / 10  
+        sigma_x = WIDTH / 5
+        sigma_y = HEIGHT / 5
 
         # Compute Gaussian distribution
-        gaussian = np.exp(
+        gaussian = 2 * np.exp(
             -(((x - mu_x) ** 2) / (2 * sigma_x ** 2) + ((y - mu_y) ** 2) / (2 * sigma_y ** 2))
-        ) - 0.6
+        )
         return gaussian
     
     def save_gaussian_graph(self, filename="gaussian_reward_graph.png"):
@@ -185,7 +185,7 @@ class Environment:
     def calculate_distance_reward(self):
         """Calculates the reward based on the position in the gaussian plane."""
         x, y = self.car_agent.x, self.car_agent.y
-        reward = self.gaussian_reward_plane[int(x), int(y)]
+        reward = self.gaussian_reward_plane[int(y), int(x)]
         return reward
 
     def generate_video_current_run(self):
@@ -230,8 +230,6 @@ class Environment:
         # Update the car's state based on the action
         self.move_car(action)
 
-        reward = self.calculate_distance_reward()
-
         # Get the updated state
         state = self.get_current_state()
 
@@ -247,9 +245,11 @@ class Environment:
             self.generate_video_current_run()
             return True, REWARDS["parked"], state
 
-        if self.total_moves > 6000:
+        if self.total_moves > 1000:
             self.total_moves = 0
             return True, REWARDS["time_up"], state
+
+        reward = self.calculate_distance_reward()
 
         # Default penalty for no progress
         return False, reward, state
