@@ -9,19 +9,16 @@ from car import Car
 import matplotlib.pyplot as plt
 
 ACTIONS_MAPPING = {
-    "0": "Accelerate straight",
-    "1": "Accelerate left",
-    "2": "Accelerate right",
-    "3": "Decelerate",
-    "4": "Brake left",
-    "5": "Brake right",
-    "6": "Do nothing",
+    "0": "accelerate",
+    "1": "decelerate",
+    "2": "right",
+    "3": "left",
 }
 
 REWARDS = {
-    "collision": -1000,
+    "collision": -500,
     "parked": 1000,
-    "time_up": -1000,
+    "time_up": -500,
 }
 
 pygame.init()
@@ -37,7 +34,6 @@ GREEN = (0, 255, 0)
 CLOCK = pygame.time.Clock()
 FPS = 60
 
-
 class Environment:
     def __init__(self) -> None:
         self.generate_car()
@@ -49,6 +45,8 @@ class Environment:
         self.parked_tolerance_margin = 10
         self.env_reset()
         self.all_actions_current_run = list()
+        self.all_reward_current_run = list()
+        self.all_angle_rewards = list()
         self.gaussian_reward_plane = self.create_gaussian_plane()
         self.save_gaussian_graph()
 
@@ -67,14 +65,16 @@ class Environment:
 
         # Define Gaussian parameters
         mu_x = self.parking_spot_x
-        mu_y = self.parking_spot_y
-        sigma_x = WIDTH / 5
-        sigma_y = HEIGHT / 5
+        mu_y = HEIGHT - self.parking_spot_y
+        sigma_x = WIDTH / 4
+        sigma_y = HEIGHT / 4
 
         # Compute Gaussian distribution
-        gaussian = 2 * np.exp(
+        gaussian = 1 * np.exp(
             -(((x - mu_x) ** 2) / (2 * sigma_x ** 2) + ((y - mu_y) ** 2) / (2 * sigma_y ** 2))
         )
+
+        # gaussian = np.floor(gaussian).astype(int)
         return gaussian
     
     def save_gaussian_graph(self, filename="gaussian_reward_graph.png"):
@@ -104,6 +104,8 @@ class Environment:
         pygame.event.clear()
         if reset_actions_list:
             self.all_actions_current_run = []
+            self.all_reward_current_run = []
+            self.all_angle_rewards = []
             self.iteration_num += 1
         return self.get_current_state()
 
@@ -184,9 +186,30 @@ class Environment:
 
     def calculate_distance_reward(self):
         """Calculates the reward based on the position in the gaussian plane."""
-        x, y = self.car_agent.x, self.car_agent.y
+        x, y = self.car_agent.x, HEIGHT - self.car_agent.y
         reward = self.gaussian_reward_plane[int(y), int(x)]
         return reward
+
+    def calculate_angle_reward(self):        
+        # Compute vector differences
+        dy = self.parking_spot_y - self.car_agent.y
+        dx = self.parking_spot_x - self.car_agent.x
+
+        # Compute angle to parking spot in degrees
+        angle_to_parking_spot = math.degrees(math.atan2(dy, dx))
+
+        # Normalize angles to [0, 360)
+        car_angle = self.car_agent.angle % 360
+        angle_to_parking_spot = angle_to_parking_spot % 360
+
+        # Compute the angular difference and normalize to [0, 180]
+        diff = abs(car_angle - angle_to_parking_spot)
+        diff = min(diff, 360 - diff)
+
+        # Compute reward: Higher reward for smaller angular difference
+        reward = 1 - diff / 180
+        return reward
+
 
     def generate_video_current_run(self):
         self.env_reset(reset_actions_list=False)
@@ -199,9 +222,9 @@ class Environment:
             (frame_width, frame_height),
         )
 
-        for i in self.all_actions_current_run:
+        for i in range(len(self.all_actions_current_run)-1):
             state = self.get_current_state()
-            action = i
+            action = self.all_actions_current_run[i]
             self.move_car(action)
 
             # Draw environment in pygame
@@ -216,12 +239,32 @@ class Environment:
             frame = cv.cvtColor(
                 frame, cv.COLOR_RGB2BGR
             )  # Convert RGB to BGR for OpenCV
+
+            # Get the reward for the current frame
+            position_reward = self.all_reward_current_run[i]
+            angle_reward = self.all_angle_rewards[i]
+
+            # Add the reward text to the frame
+            font = cv.FONT_HERSHEY_SIMPLEX
+            font_scale = 0.5
+            color = (0, 0, 0)  # Green color for the reward text
+            thickness = 2
+            text = f"Position Reward: {position_reward:.2f}"  # Format reward to 2 decimal places
+
+            cv.putText(frame, text, (50, 50), font, font_scale, color, thickness)
+
+            text = f"Angle Reward: {angle_reward:.2f}"  # Format reward to 2 decimal places
+
+            cv.putText(frame, text, (400, 50), font, font_scale, color, thickness)
+
             out.write(frame)
 
             CLOCK.tick(FPS)
         print("Finished saving video!!")
         out.release()
         self.all_actions_current_run = []
+        self.all_reward_current_run = []
+        self.all_angle_rewards = []
         self.screen.fill(GRAY)
 
     def execute_move(self, action):
@@ -237,19 +280,27 @@ class Environment:
 
         # Collision detection
         if self.check_collision():
+            self.all_reward_current_run.append(REWARDS["collision"])
+            # self.generate_video_current_run()
             return True, REWARDS["collision"], state
 
         # Parking success
         if self.check_parking():
-            print("parked succesfully")
+            print(f"parked succesfully. Reward: {REWARDS['parked']}")
             self.generate_video_current_run()
+            self.all_reward_current_run.append(REWARDS["parked"])
             return True, REWARDS["parked"], state
 
-        if self.total_moves > 1000:
+        if self.total_moves > 500:
             self.total_moves = 0
+            self.all_reward_current_run.append(REWARDS["time_up"])
+            # self.generate_video_current_run()
             return True, REWARDS["time_up"], state
 
-        reward = self.calculate_distance_reward()
+        reward = self.calculate_distance_reward() + self.calculate_angle_reward()
+
+        self.all_reward_current_run.append(self.calculate_distance_reward())
+        self.all_angle_rewards.append(self.calculate_angle_reward())
 
         # Default penalty for no progress
         return False, reward, state

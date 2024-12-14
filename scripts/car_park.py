@@ -72,7 +72,7 @@ class CarPark:
     def train_actor_critic(self, episodes, gamma=0.99, update_every=5):
         stats = {"Loss": [], "Returns": []}
         progress_bar = tqdm(range(1, episodes + 1), desc="Training", leave=True)
-        epsilon = 1.0  # Initial epsilon for exploration
+        epsilon = 0.2  # Initial epsilon for exploration
 
         for episode in progress_bar:
             state = self.environment_inst.env_reset()
