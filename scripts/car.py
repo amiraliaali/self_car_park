@@ -1,5 +1,6 @@
 import math
 import pygame
+import random
 
 CAR_WIDTH, CAR_HEIGHT = 50, 30
 
@@ -21,8 +22,11 @@ class Car:
 
     def reset(self):
         """Reset the car's position."""
-        self.x = self.initial_x + self.width // 2
-        self.y = self.initial_y + self.height // 2
+        # self.x = self.initial_x + self.width // 2
+        # self.y = self.initial_y + self.height // 2
+        self.x = random.randrange(50, 101, 5) + self.width // 2
+        self.y = random.randrange(100, 501, 50) + self.height // 2
+
         self.speed = 0
         self.angle = 0 % 360
 

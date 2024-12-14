@@ -16,9 +16,9 @@ ACTIONS_MAPPING = {
 }
 
 REWARDS = {
-    "collision": -500,
-    "parked": 1000,
-    "time_up": -500,
+    "collision": -5000,
+    "parked": 5000,
+    "time_up": -3000,
 }
 
 pygame.init()
@@ -32,17 +32,17 @@ RED = (255, 0, 0)
 GREEN = (0, 255, 0)
 
 CLOCK = pygame.time.Clock()
-FPS = 60
+FPS = 30
 
 class Environment:
     def __init__(self) -> None:
         self.generate_car()
         self.generate_obstacle_cars()
-        self.iteration_num = 0
-        self.parking_spot_x, self.parking_spot_y = 300, 300
+        self.iteration_num = -1
+        self.parking_spot_x, self.parking_spot_y = 400, 300
         self.window_opened = False
         self.action_num = 0
-        self.parked_tolerance_margin = 10
+        self.parked_tolerance_margin = 15
         self.env_reset()
         self.all_actions_current_run = list()
         self.all_reward_current_run = list()
@@ -70,9 +70,9 @@ class Environment:
         sigma_y = HEIGHT / 4
 
         # Compute Gaussian distribution
-        gaussian = 1 * np.exp(
+        gaussian = 3 * np.exp(
             -(((x - mu_x) ** 2) / (2 * sigma_x ** 2) + ((y - mu_y) ** 2) / (2 * sigma_y ** 2))
-        )
+        ) - 1
 
         # gaussian = np.floor(gaussian).astype(int)
         return gaussian
@@ -216,7 +216,7 @@ class Environment:
         frame_width, frame_height = WIDTH, HEIGHT
         fourcc = cv.VideoWriter_fourcc(*"H264")  # Codec for MP4
         out = cv.VideoWriter(
-            f"output_video_{self.iteration_num}.mp4",
+            f"output_videos/{self.iteration_num}.mp4",
             fourcc,
             FPS,
             (frame_width, frame_height),
@@ -243,19 +243,28 @@ class Environment:
             # Get the reward for the current frame
             position_reward = self.all_reward_current_run[i]
             angle_reward = self.all_angle_rewards[i]
+            total_reward = sum(self.all_reward_current_run[:i]) + sum(self.all_angle_rewards[:i])
 
             # Add the reward text to the frame
             font = cv.FONT_HERSHEY_SIMPLEX
             font_scale = 0.5
             color = (0, 0, 0)  # Green color for the reward text
             thickness = 2
-            text = f"Position Reward: {position_reward:.2f}"  # Format reward to 2 decimal places
+            text = f"Current Reward: {position_reward:.2f}"  # Format reward to 2 decimal places
 
-            cv.putText(frame, text, (50, 50), font, font_scale, color, thickness)
+            cv.putText(frame, text, (50, 75), font, font_scale, color, thickness)
 
             text = f"Angle Reward: {angle_reward:.2f}"  # Format reward to 2 decimal places
 
-            cv.putText(frame, text, (400, 50), font, font_scale, color, thickness)
+            cv.putText(frame, text, (400, 75), font, font_scale, color, thickness)
+
+            text = f"Iteration: {self.iteration_num}"  # Format reward to 2 decimal places
+
+            cv.putText(frame, text, (50, 50), font, font_scale, color, thickness)
+
+            text = f"Total Reward: {total_reward:.2f}"  # Format reward to 2 decimal places
+
+            cv.putText(frame, text, (50, 100), font, font_scale, color, thickness)
 
             out.write(frame)
 
@@ -281,20 +290,23 @@ class Environment:
         # Collision detection
         if self.check_collision():
             self.all_reward_current_run.append(REWARDS["collision"])
-            # self.generate_video_current_run()
+            if self.iteration_num % 100 == 0:
+                self.generate_video_current_run()
             return True, REWARDS["collision"], state
 
         # Parking success
         if self.check_parking():
             print(f"parked succesfully. Reward: {REWARDS['parked']}")
-            self.generate_video_current_run()
             self.all_reward_current_run.append(REWARDS["parked"])
+            if self.iteration_num % 100 == 0:
+                self.generate_video_current_run()
             return True, REWARDS["parked"], state
 
-        if self.total_moves > 500:
+        if self.total_moves > 1000:
             self.total_moves = 0
             self.all_reward_current_run.append(REWARDS["time_up"])
-            # self.generate_video_current_run()
+            if self.iteration_num % 100 == 0:
+                self.generate_video_current_run()
             return True, REWARDS["time_up"], state
 
         reward = self.calculate_distance_reward() + self.calculate_angle_reward()
@@ -306,13 +318,37 @@ class Environment:
         return False, reward, state
 
     def get_current_state(self):
+        # Compute vector differences
+        dy = self.parking_spot_y - self.car_agent.y
+        dx = self.parking_spot_x - self.car_agent.x
+
+        # Compute angle to parking spot in degrees
+        angle_to_parking_spot = math.degrees(math.atan2(dy, dx))
+
+        # Normalize angles to [0, 360)
+        car_angle = self.car_agent.angle % 360
+        angle_to_parking_spot = angle_to_parking_spot % 360
+
+        distance_to_parking_spot = math.sqrt(dy**2 + dx**2)
+
         return [
-            self.car_agent.x,
-            self.car_agent.y,
-            self.car_agent.angle,
-            self.parking_spot_x,
-            self.parking_spot_y,
+            # self.car_agent.x,
+            # self.car_agent.y,
+            # self.car_agent.angle,
+            # self.parking_spot_x,
+            # self.parking_spot_y,
+            distance_to_parking_spot,
+            angle_to_parking_spot,
         ]
+
+
+        # return [
+        #     self.car_agent.x,
+        #     self.car_agent.y,
+        #     self.car_agent.angle,
+        #     self.parking_spot_x,
+        #     self.parking_spot_y,
+        # ]
 
     def test_run(self, run_time_in_sec):
         self.env_reset()
