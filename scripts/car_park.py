@@ -1,7 +1,6 @@
 import numpy as np
-from torch import nn as nn
+from torch import nn
 import torch
-from replay_memory import ReplayMemory
 from torch.optim import AdamW
 from tqdm import tqdm
 import torch.nn.functional as F
@@ -10,28 +9,28 @@ import environment as env
 class ActorCritic(nn.Module):
     def __init__(self, state_dim, action_dim):
         super(ActorCritic, self).__init__()
-        # Shared base layers
         self.actor_base = nn.Sequential(
             nn.Linear(state_dim, 128),
-            # nn.LayerNorm(128),
+            nn.ReLU(),
+            nn.Linear(128, 256),
+            nn.ReLU(),
+            nn.Linear(256, 512),
+            nn.ReLU(),
+            nn.Linear(512, 64),
+            nn.ReLU(),
+        )
+        self.actor = nn.Sequential(
+            nn.Linear(64, action_dim),
+            nn.Softmax(dim=-1),
+        )
+        self.critic = nn.Sequential(
+            nn.Linear(state_dim, 128),
             nn.ReLU(),
             nn.Linear(128, 256),
             nn.ReLU(),
             nn.Linear(256, 64),
             nn.ReLU(),
-        )
-        # Actor network
-        self.actor = nn.Sequential(
-            nn.Linear(64, action_dim),
-            nn.Softmax(dim=-1),  # Outputs probabilities for actions
-        )
-        # Critic network
-        self.critic = nn.Sequential(
-            nn.Linear(state_dim, 128),
-            nn.ReLU(),
-            nn.Linear(128, 128),
-            nn.ReLU(),
-            nn.Linear(128, 1),  # Outputs state value
+            nn.Linear(64, 1),
         )
 
     def forward(self, state):
@@ -47,10 +46,7 @@ class CarPark:
         self.num_actions = len(env.ACTIONS_MAPPING)
         self.states_dim = len(self.environment_inst.get_current_state())
         self.model = ActorCritic(self.states_dim, self.num_actions)
-        self.optimizer = AdamW(self.model.parameters(), lr=0.001)
-
-        self.replay_memory = ReplayMemory(capacity=10000)  # Replay buffer
-        self.batch_size = 32  # Mini-batch size
+        self.optimizer = AdamW(self.model.parameters(), lr=0.0001)
 
     def save_model(self, path="/Users/amiraliaali/Documents/Coding/RL/cross_street/actor_critic.pth"):
         torch.save(self.model.state_dict(), path)
@@ -72,7 +68,6 @@ class CarPark:
     def train_actor_critic(self, episodes, gamma=0.99, update_every=5):
         stats = {"Loss": [], "Returns": []}
         progress_bar = tqdm(range(1, episodes + 1), desc="Training", leave=True)
-        epsilon = 0.2  # Initial epsilon for exploration
 
         for episode in progress_bar:
             state = self.environment_inst.env_reset()
@@ -80,28 +75,14 @@ class CarPark:
             ep_return = 0
 
             while not done:
-                # Epsilon-greedy action selection
-                epsilon = max(0.1, epsilon * 0.99)  # Epsilon decay
-                if np.random.rand() < epsilon:
-                    # Exploration: random action
-                    action = np.random.randint(0, self.num_actions)
-                    log_prob = torch.tensor([0.0])
-                else:
-                    # Exploitation: choose best action from the model
-                    action, log_prob = self.select_action(state)
-
-                # Execute the action in the environment
+                action, log_prob = self.select_action(state)
                 done, reward, next_state = self.environment_inst.execute_move(action)
 
-                # Push experience to replay memory
-                self.replay_memory.push((state, action, log_prob, reward, next_state, done))
+                # Train directly on the current step
+                loss = self.train_step(state, action, log_prob, reward, next_state, done, gamma)
 
                 state = next_state
                 ep_return += reward
-
-                # Train if replay memory has enough samples
-                if len(self.replay_memory) >= self.batch_size:
-                    self.train_batch(gamma)
 
             stats["Returns"].append(ep_return)
 
@@ -112,44 +93,32 @@ class CarPark:
 
         return stats
 
+    def train_step(self, state, action, log_prob, reward, next_state, done, gamma):
+        state = torch.FloatTensor(state).unsqueeze(0)
+        next_state = torch.FloatTensor(next_state).unsqueeze(0)
+        reward = torch.FloatTensor([reward])
+        done = torch.FloatTensor([done])
 
-    def train_batch(self, gamma):
-        # Sample a mini-batch from replay memory
-        batch = self.replay_memory.sample(self.batch_size)
-        states, actions, log_probs, rewards, next_states, dones = zip(*batch)
+        # Forward pass
+        _, state_value = self.model(state)
+        _, next_state_value = self.model(next_state)
 
-        # Convert to tensors
-        states = torch.FloatTensor(states)
-        actions = torch.LongTensor(actions)
-        rewards = torch.FloatTensor(rewards)
-        next_states = torch.FloatTensor(next_states)
-        dones = torch.FloatTensor(dones)
+        # Compute target and advantage
+        target = reward + gamma * next_state_value.squeeze() * (1 - done)
+        advantage = target - state_value.squeeze()
 
-        # Compute values and advantages
-        action_probs, state_values = self.model(states)
-        _, next_state_values = self.model(next_states)
-        next_state_values = next_state_values.detach()
+        # Actor loss
+        entropy = -torch.sum(log_prob * torch.log(log_prob + 1e-10))
+        actor_loss = -log_prob * advantage - 0.04 * entropy
 
-        # Compute targets for the critic
-        targets = rewards + gamma * next_state_values.squeeze() * (1 - dones)
+        # Critic loss
+        critic_loss = F.mse_loss(state_value.squeeze(), target)
 
-        # Compute advantages for the actor
-        advantages = targets - state_values.squeeze()
-
-        # Actor loss (policy gradient)
-        log_probs = torch.stack(log_probs)
-        entropy = -torch.sum(action_probs * torch.log(action_probs + 1e-10), dim=1).mean()
-        actor_loss = -log_probs * advantages - 0.01 * entropy
-
-
-        # Critic loss (value function)
-        critic_loss = F.mse_loss(state_values.squeeze(), targets)
-
-        loss = actor_loss + critic_loss
+        loss = actor_loss + 0.5 * critic_loss
 
         # Backpropagation
         self.optimizer.zero_grad()
-        loss = loss.mean()
         loss.backward()
         self.optimizer.step()
 
+        return loss.item()
