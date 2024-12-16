@@ -2,7 +2,10 @@ import math
 import pygame
 import random
 
-CAR_WIDTH, CAR_HEIGHT = 50, 30
+CAR_WIDTH, CAR_HEIGHT = 40, 20
+
+WIDTH, HEIGHT = 500, 400
+
 
 class Car:
     def __init__(self, x, y):
@@ -12,23 +15,28 @@ class Car:
         self.y = y + self.height // 2
         self.speed = 0
         self.acceleration = 0.2
-        self.angle = 0 % 360
-        self.fricition = 0.05
+        self.angle = 0
+        self.fricition = 0.01
         self.max_speed = 5
         self.min_speed = -2
-        self.steering_angle = 7
+        self.steering_angle = 10
         self.initial_x = x
         self.initial_y = y
 
     def reset(self):
         """Reset the car's position."""
-        # self.x = self.initial_x + self.width // 2
-        # self.y = self.initial_y + self.height // 2
-        self.x = random.randrange(50, 101, 5) + self.width // 2
-        self.y = random.randrange(100, 501, 50) + self.height // 2
+        self.x = self.initial_x + self.width // 2
+        self.y = WIDTH - self.initial_y + self.height // 2
 
         self.speed = 0
-        self.angle = 0 % 360
+        self.angle = 0
+
+    def reset_randomly(self):
+        self.x = random.randrange(50, 250, 20)
+        self.y = random.randrange(100, 350, 20)
+
+        self.speed = 0
+        self.angle = 0
 
     def increase_speed(self):
         self.speed += self.acceleration
@@ -64,12 +72,6 @@ class Car:
         rad = math.radians(self.angle)
         self.x += self.speed * math.cos(rad)
         self.y += self.speed * math.sin(rad)
-
-    def boundary_collision(self, width, height):
-        """Check for collisions with boundaries."""
-        if self.x < 0 or self.x > width or self.y < 0 or self.y > height:
-            return True
-        return False
     
     def check_parking(self, parking_spot_x, parking_spot_y, parked_tolerance_margin):
         """Check if the car is parked in the designated spot and centered inside."""

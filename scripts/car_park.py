@@ -109,7 +109,7 @@ class CarPark:
 
         # Actor loss
         entropy = -torch.sum(log_prob * torch.log(log_prob + 1e-10))
-        actor_loss = -log_prob * advantage - 0.04 * entropy
+        actor_loss = -log_prob * advantage - 0.01 * entropy
 
         # Critic loss
         critic_loss = F.mse_loss(state_value.squeeze(), target)

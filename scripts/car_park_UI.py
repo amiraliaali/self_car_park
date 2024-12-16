@@ -37,9 +37,7 @@ class CarParkUI(CarPark):
             state = torch.FloatTensor(state).unsqueeze(0)
 
             # Use policy network for action selection
-            with torch.no_grad():
-                action_probs, _ = self.model(state)
-                action = torch.argmax(action_probs).item()
+            action, log_prob = self.select_action(state)
 
             # Execute the action
             self.environment_inst.move_car(action)
@@ -69,8 +67,8 @@ class CarParkUI(CarPark):
 if __name__ == "__main__":
     cp = CarParkUI()
     print("Starting training...")
-    cp.train_actor_critic(episodes=50)
+    cp.train_actor_critic(episodes=20000)
     print("Training completed. Running test agent...")
     # cp.load_model()
-    # cp.save_model()
+    cp.save_model()
     cp.show_test_agent()
