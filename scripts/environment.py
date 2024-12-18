@@ -341,14 +341,14 @@ class Environment:
         angle_to_parking_spot = angle_to_parking_spot % 360
 
         diff_angle = abs(car_angle - angle_to_parking_spot)
-        diff_angle = min(diff_angle, 360 - diff_angle) # / 180
+        diff_angle = min(diff_angle, 360 - diff_angle) / 180
 
         distance_to_parking_spot = self.calc_car_distance(self.parking_spot_x, self.parking_spot_y)
         max_dist = self.calc_car_distance(WIDTH, HEIGHT)
         distances_to_obst = []
         for (x,y) in self.obstacles:
             if (x, y) != (self.parking_spot_x, self.parking_spot_y):
-                distances_to_obst.append(self.calc_car_distance(x, y))
+                distances_to_obst.append(self.calc_car_distance(x, y) / max_dist)
 
         obtalces_coordinates = []
         for (x, y) in self.obstacles:
@@ -359,7 +359,7 @@ class Environment:
 
         return [
             diff_angle,
-            distance_to_parking_spot,
+            distance_to_parking_spot/max_dist,
             *distances_to_obst,
             # self.car_agent.angle / 180,
             # self.car_agent.x / WIDTH,
