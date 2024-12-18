@@ -47,12 +47,13 @@ class CarPark:
         self.states_dim = len(self.environment_inst.get_current_state())
         self.model = ActorCritic(self.states_dim, self.num_actions)
         self.optimizer = AdamW(self.model.parameters(), lr=0.0001)
+        self.highest_reward = 0
 
     def save_model(self, path="/Users/amiraliaali/Documents/Coding/RL/cross_street/actor_critic.pth"):
         torch.save(self.model.state_dict(), path)
         print(f"Model saved to {path}.")
 
-    def load_model(self, path="/Users/amiraliaali/Documents/Coding/RL/cross_street/actor_critic.pth"):
+    def load_model(self, path="/Users/amiraliaali/Documents/Coding/RL/cross_street/best_actor_critic.pth"):
         self.model.load_state_dict(torch.load(path))
         self.model.eval()
         print(f"Model loaded from {path}.")
@@ -65,7 +66,7 @@ class CarPark:
         action = action_dist.sample()
         return action.item(), action_dist.log_prob(action)
 
-    def train_actor_critic(self, episodes, gamma=0.99, update_every=5):
+    def train_actor_critic(self, episodes, gamma=0.99, update_every=5, save_best_model=True):
         stats = {"Loss": [], "Returns": []}
         progress_bar = tqdm(range(1, episodes + 1), desc="Training", leave=True)
 
@@ -83,7 +84,11 @@ class CarPark:
 
                 state = next_state
                 ep_return += reward
-
+            if save_best_model:
+                if ep_return > self.highest_reward:
+                    self.highest_reward = ep_return
+                    self.save_model("/Users/amiraliaali/Documents/Coding/RL/cross_street/best_actor_critic.pth")
+            
             stats["Returns"].append(ep_return)
 
             # Update progress bar

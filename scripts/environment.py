@@ -39,7 +39,9 @@ class Environment:
     def __init__(self) -> None:
         self.spots = [(400, 340), (400, 300), (400, 260), (400, 220), (400, 180), (400, 140), (400, 100),
              (260, 220), (260, 180), (260, 140), (260, 100),
+             (200, 220), (200, 180), (200, 140), (200, 100),
              ]
+        self.car_x, self.car_y = 50, 250
         self.generate_car()
         self.iteration_num = -1
         self.parking_spot_x, self.parking_spot_y = 400, 140
@@ -50,12 +52,10 @@ class Environment:
         self.all_actions_current_run = list()
         self.all_reward_current_run = list()
         self.all_angle_rewards = list()
-        self.gaussian_reward_plane = self.create_gaussian_plane()
-        self.save_gaussian_graph()
         self.max_dist = math.sqrt(WIDTH**2 + HEIGHT**2)
 
-    def generate_car(self, x=50, y=250):
-        self.car_agent = Car(x, y)
+    def generate_car(self):
+        self.car_agent = Car(self.car_x, self.car_y)
         self.car_surface = pygame.Surface(
             (self.car_agent.width, self.car_agent.height), pygame.SRCALPHA
         )
@@ -67,46 +67,6 @@ class Environment:
             return True
         return False
 
-    def create_gaussian_plane(self):
-        # Generate coordinate grid
-        x = np.arange(0, WIDTH, 1)
-        y = np.arange(0, HEIGHT, 1)
-        x, y = np.meshgrid(x, y)
-
-        # Define Gaussian parameters
-        mu_x = self.parking_spot_x
-        mu_y = HEIGHT - self.parking_spot_y
-        sigma_x = WIDTH / 2
-        sigma_y = HEIGHT / 2
-
-        # Compute Gaussian distribution
-        gaussian = (
-            3
-            * np.exp(
-                -(
-                    ((x - mu_x) ** 2) / (2 * sigma_x**2)
-                    + ((y - mu_y) ** 2) / (2 * sigma_y**2)
-                )
-            )
-        )
-
-        # gaussian = np.floor(gaussian).astype(int)
-        return gaussian
-
-    def save_gaussian_graph(self, filename="gaussian_reward_graph.png"):
-        plt.figure(figsize=(8, 6))
-        plt.imshow(
-            self.gaussian_reward_plane,
-            extent=[0, WIDTH, 0, HEIGHT],
-            origin="lower",
-            cmap="viridis",
-        )
-        plt.colorbar(label="Intensity")
-        plt.title("Gaussian Distribution")
-        plt.xlabel("X-axis")
-        plt.ylabel("Y-axis")
-        plt.savefig(filename)
-        plt.close()
 
     def generate_obstacle_cars(self):
         self.obstacle_cars = [
@@ -116,10 +76,10 @@ class Environment:
     def env_reset(self, generate_video=False):
         pygame.init()
         # self.generate_car(50, random.choice([100, 125, 150, 175, 200, 225, 250, 275, 300]))
-        self.car_agent.reset()
-        self.current_car_parking_distance = math.inf
         pygame.event.clear()
         if not generate_video:
+            self.car_x = random.choice([50, 100, 350])
+            self.car_y = random.choice([100, 150, 200, 250, 300])
             self.parking_spot_x, self.parking_spot_y = random.choice(self.spots)
             self.obstacles = self.spots.copy()
             self.obstacles.remove((self.parking_spot_x, self.parking_spot_y))
@@ -129,6 +89,8 @@ class Environment:
             self.all_reward_current_run = []
             self.all_angle_rewards = []
             self.iteration_num += 1
+        self.car_agent.reset(self.car_x, self.car_y)
+        self.current_car_parking_distance = math.inf
         return self.get_current_state()
 
     def generate_window(self):
@@ -195,11 +157,6 @@ class Environment:
             self.parking_spot_x, self.parking_spot_y, self.parked_tolerance_margin
         )
 
-    def calculate_distance_reward_1(self):
-        """Calculates the reward based on the position in the gaussian plane."""
-        x, y = self.car_agent.x, HEIGHT - self.car_agent.y
-        reward = self.gaussian_reward_plane[int(y), int(x)]
-        return reward
 
     def calculate_distance_reward(self):
         """Calculates the reward based on the position in the gaussian plane."""
@@ -207,7 +164,7 @@ class Environment:
         y_diff = self.car_agent.y - self.parking_spot_y
         dist = math.sqrt(x_diff**2 + y_diff**2)
         dist_normalized = dist / self.max_dist
-        return 3*math.exp(-dist_normalized)
+        return 2*math.exp(-dist_normalized)
 
     def calculate_angle_reward(self):
         # Compute vector differences
@@ -270,7 +227,7 @@ class Environment:
             font_scale = 0.5
             color = (0, 0, 0)  # Green color for the reward text
             thickness = 2
-            text = f"Current Reward: {position_reward:.2f}"  # Format reward to 2 decimal places
+            text = f"Position Reward: {position_reward:.2f}"  # Format reward to 2 decimal places
 
             cv.putText(frame, text, (20, 50), font, font_scale, color, thickness)
 
@@ -335,7 +292,7 @@ class Environment:
         if self.check_collision():
             self.all_reward_current_run.append(REWARDS["collision"])
             self.all_angle_rewards.append(self.calculate_angle_reward())
-            if self.iteration_num % 500 == 0:
+            if self.iteration_num % 1000 == 0:
                 self.generate_video_current_run()
             return True, REWARDS["collision"], state
 
@@ -348,11 +305,11 @@ class Environment:
                 self.generate_video_current_run()
             return True, REWARDS["parked"], state
 
-        if self.total_moves > 500:
+        if self.total_moves > 1000:
             self.total_moves = 0
             self.all_reward_current_run.append(REWARDS["time_up"])
             self.all_angle_rewards.append(self.calculate_angle_reward())
-            if self.iteration_num % 500 == 0:
+            if self.iteration_num % 1000 == 0:
                 self.generate_video_current_run()
             return True, REWARDS["time_up"], state
 
@@ -370,20 +327,6 @@ class Environment:
 
         return math.sqrt(dy**2 + dx**2)
     
-    def get_current_state_1(self):
-        obtalces_coordinates = []
-        for (x, y) in self.spots:
-            obtalces_coordinates.append(x/WIDTH)
-            obtalces_coordinates.append(y/HEIGHT)
-
-        return[
-            self.car_agent.angle / 180,
-            self.car_agent.x / WIDTH,
-            self.car_agent.y / HEIGHT,
-            self.parking_spot_x / WIDTH,
-            self.parking_spot_y / HEIGHT,
-            *obtalces_coordinates
-        ]
 
     def get_current_state(self):
         # Compute vector differences
@@ -398,14 +341,14 @@ class Environment:
         angle_to_parking_spot = angle_to_parking_spot % 360
 
         diff_angle = abs(car_angle - angle_to_parking_spot)
-        diff_angle = min(diff_angle, 360 - diff_angle) / 180
+        diff_angle = min(diff_angle, 360 - diff_angle) # / 180
 
         distance_to_parking_spot = self.calc_car_distance(self.parking_spot_x, self.parking_spot_y)
         max_dist = self.calc_car_distance(WIDTH, HEIGHT)
         distances_to_obst = []
         for (x,y) in self.obstacles:
             if (x, y) != (self.parking_spot_x, self.parking_spot_y):
-                distances_to_obst.append(self.calc_car_distance(x, y) / max_dist)
+                distances_to_obst.append(self.calc_car_distance(x, y))
 
         obtalces_coordinates = []
         for (x, y) in self.obstacles:
@@ -416,14 +359,14 @@ class Environment:
 
         return [
             diff_angle,
-            distance_to_parking_spot/max_dist,
+            distance_to_parking_spot,
             *distances_to_obst,
-            self.car_agent.angle / 180,
-            self.car_agent.x / WIDTH,
-            self.car_agent.y / HEIGHT,
-            self.parking_spot_x / WIDTH,
-            self.parking_spot_y / HEIGHT,
-            *obtalces_coordinates
+            # self.car_agent.angle / 180,
+            # self.car_agent.x / WIDTH,
+            # self.car_agent.y / HEIGHT,
+            # self.parking_spot_x / WIDTH,
+            # self.parking_spot_y / HEIGHT,
+            # *obtalces_coordinates
         ]
 
 

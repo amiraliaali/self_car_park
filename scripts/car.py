@@ -23,10 +23,12 @@ class Car:
         self.initial_x = x
         self.initial_y = y
 
-    def reset(self):
+    def reset(self, x, y):
         """Reset the car's position."""
-        self.x = self.initial_x + self.width // 2
-        self.y = WIDTH - self.initial_y + self.height // 2
+        # self.x = self.initial_x + self.width // 2
+        # self.y = WIDTH - self.initial_y + self.height // 2
+        self.x = x
+        self.y = y
 
         self.speed = 0
         self.angle = 0
