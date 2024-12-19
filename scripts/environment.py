@@ -16,9 +16,9 @@ ACTIONS_MAPPING = {
 }
 
 REWARDS = {
-    "collision": -500,
-    "parked": 1000,
-    "time_up": -250,
+    "collision": -1000,
+    "parked": 500,
+    "time_up": -550,
 }
 
 pygame.init()
@@ -227,7 +227,9 @@ class Environment:
 
             # Draw lidar lines using Pygame
             # if not i+1>(len(self.all_actions_current_run)):
-            lidar_info = self.lidar_info[i+1]  # Get lidar information for the current frame
+            lidar_info = self.lidar_info[
+                i + 1
+            ]  # Get lidar information for the current frame
             for direction, info in lidar_info.items():
                 start = info["starting_point"]
                 end = info["ending_point"]
@@ -237,7 +239,6 @@ class Environment:
                 pygame.draw.line(self.screen, (0, 0, 255), start, end, 1)
 
             pygame.display.flip()
-
 
             # Capture the current screen for the video
             frame = pygame.surfarray.array3d(pygame.display.get_surface())
@@ -262,12 +263,33 @@ class Environment:
             thickness = 2
 
             lidar_info_ys = 20
-            for direction,dist in distances.items():
-                cv.putText(frame, f"{direction.upper()[0]}: {dist:.2f}", (lidar_info_ys, 75), font, font_scale, color, 1)
-                lidar_info_ys += 120
+            for direction, dist in distances.items():
+                if "_" not in direction:
+                    if dist < 620:
+                        cv.putText(
+                            frame,
+                            f"{direction.upper()[0]}: {dist:.2f}",
+                            (lidar_info_ys, 75),
+                            font,
+                            font_scale,
+                            color,
+                            1,
+                        )
+                    else:
+                        cv.putText(
+                            frame,
+                            f"{direction.upper()[0]}: Unk.",
+                            (lidar_info_ys, 75),
+                            font,
+                            font_scale,
+                            color,
+                            1,
+                        )
+                    lidar_info_ys += 120
 
-
-            text = f"Pos. Rew.: {position_reward:.2f}"  # Format reward to 2 decimal places
+            text = (
+                f"Pos. Rew.: {position_reward:.2f}"  # Format reward to 2 decimal places
+            )
 
             cv.putText(frame, text, (20, 50), font, font_scale, color, 1)
 
@@ -283,9 +305,7 @@ class Environment:
 
             cv.putText(frame, text, (20, 25), font, font_scale, color, thickness)
 
-            text = (
-                f"Tot. Rew.: {total_reward:.2f}"  # Format reward to 2 decimal places
-            )
+            text = f"Tot. Rew.: {total_reward:.2f}"  # Format reward to 2 decimal places
 
             cv.putText(frame, text, (350, 50), font, font_scale, color, 1)
 
@@ -315,6 +335,16 @@ class Environment:
         step_size = 1
         distance = 0
 
+        # Compute the distances to boundaries
+        t_x_min = (0 - x) / dx if dx != 0 else float('inf')
+        t_x_max = (WIDTH - x) / dx if dx != 0 else float('inf')
+        t_y_min = (0 - y) / dy if dy != 0 else float('inf')
+        t_y_max = (HEIGHT - y) / dy if dy != 0 else float('inf')
+
+        # Find the minimum positive distance to a boundary
+        boundary_distances = [t for t in [t_x_min, t_x_max, t_y_min, t_y_max] if t > 0]
+        nearest_boundary_distance = min(boundary_distances) if boundary_distances else max_distance
+
         while distance < max_distance:
             # Move the ray forward
             x += dx * step_size
@@ -327,28 +357,47 @@ class Environment:
                     return (x, y), distance  # Intersection point and distance
 
             # Stop if the ray moves out of bounds
-            if x < 0 or x > WIDTH or y < 0 or y > HEIGHT:
-                return (x, y), max_distance
+            if distance >= nearest_boundary_distance:
+                return (x + dx * (nearest_boundary_distance - distance),
+                        y + dy * (nearest_boundary_distance - distance)), nearest_boundary_distance
 
         # If no collision, return max distance
         return (x, y), max_distance
+
 
     def four_directions_lidar(self):
         current_x = self.car_agent.x
         current_y = self.car_agent.y
         current_angle = math.radians(self.car_agent.angle)
-        right_angle = math.radians(self.car_agent.angle+90)
-        back_angle = math.radians(self.car_agent.angle+180)
-        left_angle = math.radians(self.car_agent.angle-90)
+        current_right_angle = math.radians(self.car_agent.angle + 45)
+        right_angle = math.radians(self.car_agent.angle + 90)
+        right_back_angle = math.radians(self.car_agent.angle + 135)
+        back_angle = math.radians(self.car_agent.angle + 180)
+        back_left_angle = math.radians(self.car_agent.angle + -135)
+        left_angle = math.radians(self.car_agent.angle - 90)
+        left_current_angle = math.radians(self.car_agent.angle - 45)
         half_width = self.car_agent.width / 2
         half_height = self.car_agent.height / 2
 
         max_dist = math.sqrt(WIDTH**2 + HEIGHT**2)
 
-        min_distances = {"forward": max_dist, "right": max_dist, "back": max_dist, "left": max_dist}
+        min_distances = {
+            "forward": max_dist,
+            "forward_right": max_dist,
+            "right": max_dist,
+            "right_back": max_dist,
+            "back": max_dist,
+            "back_left": max_dist,
+            "left": max_dist,
+            "left_forward": max_dist,
+        }
 
         starting_points = {
             "forward": (
+                current_x,
+                current_y,
+            ),
+            "forward_right": (
                 current_x,
                 current_y,
             ),
@@ -356,11 +405,23 @@ class Environment:
                 current_x,
                 current_y,
             ),
+            "right_back": (
+                current_x,
+                current_y,
+            ),
             "back": (
                 current_x,
                 current_y,
             ),
+            "back_left": (
+                current_x,
+                current_y,
+            ),
             "left": (
+                current_x,
+                current_y,
+            ),
+            "left_forward": (
                 current_x,
                 current_y,
             ),
@@ -368,20 +429,36 @@ class Environment:
 
         end_points = {
             "forward": (
-                current_x + (half_width+700) * math.cos(current_angle),
-                current_y + (half_height+700) * math.sin(current_angle),
+                current_x + (half_width + 700) * math.cos(current_angle),
+                current_y + (half_height + 700) * math.sin(current_angle),
+            ),
+            "forward_right": (
+                current_x + (half_width + 700) * math.cos(current_right_angle),
+                current_y + (half_height + 700) * math.sin(current_right_angle),
             ),
             "right": (
-                current_x + (half_width+700) * math.cos(right_angle),
-                current_y + (half_height+700) * math.sin(right_angle),
+                current_x + (half_width + 700) * math.cos(right_angle),
+                current_y + (half_height + 700) * math.sin(right_angle),
+            ),
+            "right_back": (
+                current_x + (half_width + 700) * math.cos(right_back_angle),
+                current_y + (half_height + 700) * math.sin(right_back_angle),
             ),
             "back": (
-                current_x + (half_width+700) * math.cos(back_angle),
-                current_y + (half_height+700) * math.sin(back_angle),
+                current_x + (half_width + 700) * math.cos(back_angle),
+                current_y + (half_height + 700) * math.sin(back_angle),
+            ),
+            "back_left": (
+                current_x + (half_width + 700) * math.cos(back_left_angle),
+                current_y + (half_height + 700) * math.sin(back_left_angle),
             ),
             "left": (
-                current_x + (half_width+700) * math.cos(left_angle),
-                current_y + (half_height+700) * math.sin(left_angle),
+                current_x + (half_width + 700) * math.cos(left_angle),
+                current_y + (half_height + 700) * math.sin(left_angle),
+            ),
+            "left_forward": (
+                current_x + (half_width + 700) * math.cos(left_current_angle),
+                current_y + (half_height + 700) * math.sin(left_current_angle),
             ),
         }
 
@@ -389,10 +466,18 @@ class Environment:
             angle = current_angle
             if direction == "right":
                 angle = right_angle
+            elif direction == "forward_right":
+                angle = current_right_angle
+            elif direction == "right_back":
+                angle = right_back_angle
             elif direction == "back":
                 angle = back_angle
+            elif direction == "back_left":
+                angle = back_left_angle
             elif direction == "left":
                 angle = left_angle
+            elif direction == "left_forward":
+                angle = left_current_angle
             end_point, dist = self.raycast(s_point, angle, max_dist)
             if min_distances[direction] > dist:
                 min_distances[direction] = dist
@@ -404,21 +489,41 @@ class Environment:
                 "ending_point": end_points["forward"],
                 "min_dist": min_distances["forward"],
             },
+            "forward_right": {
+                "starting_point": starting_points["forward_right"],
+                "ending_point": end_points["forward_right"],
+                "min_dist": min_distances["forward_right"],
+            },
             "right": {
                 "starting_point": starting_points["right"],
                 "ending_point": end_points["right"],
                 "min_dist": min_distances["right"],
+            },
+            "right_back": {
+                "starting_point": starting_points["right_back"],
+                "ending_point": end_points["right_back"],
+                "min_dist": min_distances["right_back"],
             },
             "back": {
                 "starting_point": starting_points["back"],
                 "ending_point": end_points["back"],
                 "min_dist": min_distances["back"],
             },
+            "back_left": {
+                "starting_point": starting_points["back_left"],
+                "ending_point": end_points["back_left"],
+                "min_dist": min_distances["back_left"],
+            },
             "left": {
                 "starting_point": starting_points["left"],
                 "ending_point": end_points["left"],
                 "min_dist": min_distances["left"],
-            }
+            },
+            "left_forward": {
+                "starting_point": starting_points["left_forward"],
+                "ending_point": end_points["left_forward"],
+                "min_dist": min_distances["left_forward"],
+            },
         }
 
         self.lidar_info.append(lidar_info)
@@ -448,7 +553,7 @@ class Environment:
             print(f"parked succesfully. Reward: {REWARDS['parked']}")
             self.all_reward_current_run.append(REWARDS["parked"])
             self.all_angle_rewards.append(self.calculate_angle_reward())
-            if self.iteration_num % 1 == 0:
+            if sum(self.all_reward_current_run) > 1050:
                 self.generate_video_current_run()
             return True, REWARDS["parked"], state
 
@@ -503,23 +608,25 @@ class Environment:
             if (x, y) != (self.parking_spot_x, self.parking_spot_y):
                 obtalces_coordinates.append(x / WIDTH)
                 obtalces_coordinates.append(y / HEIGHT)
-        
+
         four_sides_distances_dic = self.four_directions_lidar()
         four_sides_distances = []
 
         for direc in four_sides_distances_dic:
-            four_sides_distances.append(four_sides_distances_dic[direc]["min_dist"] / max_dist)
+            four_sides_distances.append(
+                four_sides_distances_dic[direc]["min_dist"] / max_dist
+            )
 
         return [
-            diff_angle,
-            distance_to_parking_spot / max_dist,
-            * four_sides_distances
+            # diff_angle,
+            # distance_to_parking_spot / max_dist,
+            self.car_agent.angle / 180,
+            self.car_agent.x / WIDTH,
+            self.car_agent.y / HEIGHT,
+            self.parking_spot_x / WIDTH,
+            self.parking_spot_y / HEIGHT,
+            *four_sides_distances
             # *distances_to_obst,
-            # self.car_agent.angle / 180,
-            # self.car_agent.x / WIDTH,
-            # self.car_agent.y / HEIGHT,
-            # self.parking_spot_x / WIDTH,
-            # self.parking_spot_y / HEIGHT,
             # *obtalces_coordinates
         ]
 
