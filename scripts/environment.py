@@ -16,9 +16,9 @@ ACTIONS_MAPPING = {
 }
 
 REWARDS = {
-    "collision": -1000,
-    "parked": 500,
-    "time_up": -550,
+    "collision": -50,
+    "parked": 50,
+    "time_up": -50,
 }
 
 pygame.init()
@@ -45,28 +45,29 @@ class Environment:
             (400, 180),
             (400, 140),
             (400, 100),
-            (260, 220),
-            (260, 180),
-            (260, 140),
-            (260, 100),
-            (200, 220),
-            (200, 180),
-            (200, 140),
-            (200, 100),
+            # (260, 220),
+            # (260, 180),
+            # (260, 140),
+            # (260, 100),
+            # (200, 340),
+            # (200, 300),
+            # (200, 140),
+            # (200, 100),
         ]
+        self.max_dist = math.sqrt(WIDTH**2 + HEIGHT**2)
         self.car_x, self.car_y = 50, 250
         self.generate_car()
         self.iteration_num = -1
         self.parking_spot_x, self.parking_spot_y = 400, 140
         self.window_opened = False
         self.action_num = 0
-        self.parked_tolerance_margin = 5
+        self.parked_tolerance_margin = 7
         self.env_reset()
         self.all_actions_current_run = list()
         self.all_reward_current_run = list()
         self.all_angle_rewards = list()
         self.lidar_info = list()
-        self.max_dist = math.sqrt(WIDTH**2 + HEIGHT**2)
+        
 
     def generate_car(self):
         self.car_agent = Car(self.car_x, self.car_y)
@@ -97,8 +98,9 @@ class Environment:
         # self.generate_car(50, random.choice([100, 125, 150, 175, 200, 225, 250, 275, 300]))
         pygame.event.clear()
         if not generate_video:
-            self.car_x = random.choice([50, 100, 350])
-            self.car_y = random.choice([100, 150, 200, 250, 300])
+            self.car_x = random.randrange(50, 100, 5)
+            self.car_y = random.randrange(200, 300, 5)
+            self.car_angle = random.randrange(0, 360)
             self.parking_spot_x, self.parking_spot_y = random.choice(self.spots)
             self.obstacles = self.spots.copy()
             self.obstacles.remove((self.parking_spot_x, self.parking_spot_y))
@@ -109,7 +111,7 @@ class Environment:
             self.all_angle_rewards = []
             self.lidar_info = []
             self.iteration_num += 1
-        self.car_agent.reset(self.car_x, self.car_y)
+        self.car_agent.reset(self.car_x, self.car_y, self.car_angle)
         self.current_car_parking_distance = math.inf
         return self.get_current_state()
 
@@ -183,7 +185,8 @@ class Environment:
         y_diff = self.car_agent.y - self.parking_spot_y
         dist = math.sqrt(x_diff**2 + y_diff**2)
         dist_normalized = dist / self.max_dist
-        return 2 * math.exp(-dist_normalized)
+        return -2*dist_normalized
+        # return 2 * math.exp(-dist_normalized/10)
 
     def calculate_angle_reward(self):
         # Compute vector differences
@@ -203,7 +206,10 @@ class Environment:
 
         # Compute reward: Higher reward for smaller angular difference
         reward = 1 - diff / 180
-        return reward
+        diff_normalized = diff / 180
+        # return reward
+        return 1-diff_normalized
+
 
     def generate_video_current_run(self):
         self.env_reset(True)
@@ -379,17 +385,15 @@ class Environment:
         half_width = self.car_agent.width / 2
         half_height = self.car_agent.height / 2
 
-        max_dist = math.sqrt(WIDTH**2 + HEIGHT**2)
-
         min_distances = {
-            "forward": max_dist,
-            "forward_right": max_dist,
-            "right": max_dist,
-            "right_back": max_dist,
-            "back": max_dist,
-            "back_left": max_dist,
-            "left": max_dist,
-            "left_forward": max_dist,
+            "forward": self.max_dist,
+            "forward_right": self.max_dist,
+            "right": self.max_dist,
+            "right_back": self.max_dist,
+            "back": self.max_dist,
+            "back_left": self.max_dist,
+            "left": self.max_dist,
+            "left_forward": self.max_dist,
         }
 
         starting_points = {
@@ -478,7 +482,7 @@ class Environment:
                 angle = left_angle
             elif direction == "left_forward":
                 angle = left_current_angle
-            end_point, dist = self.raycast(s_point, angle, max_dist)
+            end_point, dist = self.raycast(s_point, angle, self.max_dist)
             if min_distances[direction] > dist:
                 min_distances[direction] = dist
                 end_points[direction] = end_point
@@ -544,7 +548,7 @@ class Environment:
         if self.check_collision():
             self.all_reward_current_run.append(REWARDS["collision"])
             self.all_angle_rewards.append(self.calculate_angle_reward())
-            if self.iteration_num % 500 == 0:
+            if self.iteration_num % 5 == 0:
                 self.generate_video_current_run()
             return True, REWARDS["collision"], state
 
@@ -553,19 +557,19 @@ class Environment:
             print(f"parked succesfully. Reward: {REWARDS['parked']}")
             self.all_reward_current_run.append(REWARDS["parked"])
             self.all_angle_rewards.append(self.calculate_angle_reward())
-            if sum(self.all_reward_current_run) > 1050:
-                self.generate_video_current_run()
+            # if sum(self.all_reward_current_run) > 1120:
+            self.generate_video_current_run()
             return True, REWARDS["parked"], state
 
         if self.total_moves > 1000:
             self.total_moves = 0
             self.all_reward_current_run.append(REWARDS["time_up"])
             self.all_angle_rewards.append(self.calculate_angle_reward())
-            if self.iteration_num % 500 == 0:
+            if self.iteration_num % 5 == 0:
                 self.generate_video_current_run()
             return True, REWARDS["time_up"], state
 
-        reward = self.calculate_distance_reward() + self.calculate_angle_reward()
+        reward = 0.7*self.calculate_distance_reward() + 0.3*self.calculate_angle_reward()
 
         self.all_reward_current_run.append(self.calculate_distance_reward())
         self.all_angle_rewards.append(self.calculate_angle_reward())
@@ -592,16 +596,18 @@ class Environment:
         angle_to_parking_spot = angle_to_parking_spot % 360
 
         diff_angle = abs(car_angle - angle_to_parking_spot)
-        diff_angle = min(diff_angle, 360 - diff_angle) / 180
+        diff_angle = min(diff_angle, 360 - diff_angle) / 360
 
         distance_to_parking_spot = self.calc_car_distance(
             self.parking_spot_x, self.parking_spot_y
         )
-        max_dist = self.calc_car_distance(WIDTH, HEIGHT)
+        relative_x = (self.parking_spot_x - self.car_agent.x) / WIDTH
+        relative_y = (self.parking_spot_y - self.car_agent.y) / HEIGHT
+
         distances_to_obst = []
         for x, y in self.obstacles:
             if (x, y) != (self.parking_spot_x, self.parking_spot_y):
-                distances_to_obst.append(self.calc_car_distance(x, y) / max_dist)
+                distances_to_obst.append(self.calc_car_distance(x, y) / self.max_dist)
 
         obtalces_coordinates = []
         for x, y in self.obstacles:
@@ -609,25 +615,27 @@ class Environment:
                 obtalces_coordinates.append(x / WIDTH)
                 obtalces_coordinates.append(y / HEIGHT)
 
-        four_sides_distances_dic = self.four_directions_lidar()
-        four_sides_distances = []
+        eight_sides_distances_dic = self.four_directions_lidar()
+        eight_sides_distances = []
 
-        for direc in four_sides_distances_dic:
-            four_sides_distances.append(
-                four_sides_distances_dic[direc]["min_dist"] / max_dist
+        for direc in eight_sides_distances_dic:
+            eight_sides_distances.append(
+                eight_sides_distances_dic[direc]["min_dist"] / self.max_dist
             )
 
         return [
-            # diff_angle,
-            # distance_to_parking_spot / max_dist,
-            self.car_agent.angle / 180,
-            self.car_agent.x / WIDTH,
-            self.car_agent.y / HEIGHT,
             self.parking_spot_x / WIDTH,
             self.parking_spot_y / HEIGHT,
-            *four_sides_distances
-            # *distances_to_obst,
-            # *obtalces_coordinates
+            self.car_agent.x / WIDTH,
+            self.car_agent.y / HEIGHT,
+            self.car_agent.angle / 360,
+            self.car_agent.speed / self.car_agent.max_speed,
+            diff_angle,
+            relative_x/WIDTH,
+            relative_y/HEIGHT,
+            distance_to_parking_spot/self.max_dist,
+            *eight_sides_distances,
+            
         ]
 
     def test_run(self, run_time_in_sec):

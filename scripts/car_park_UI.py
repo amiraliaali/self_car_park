@@ -1,5 +1,5 @@
 import numpy as np
-from car_park import *
+from car_park_ppo import *
 import cv2 as cv
 import pygame
 import environment as env
@@ -67,9 +67,8 @@ class CarParkUI(CarPark):
 if __name__ == "__main__":
     cp = CarParkUI()
     print("Starting training...")
-    cp.train_actor_critic(episodes=100000)
+    cp.train(episodes=50000)
     print("Training completed. Running test agent...")
-    cp.train_actor_critic(episodes=1, save_best_model=False)
     # cp.load_model()
     cp.save_model()
     cp.show_test_agent()
