@@ -16,9 +16,9 @@ ACTIONS_MAPPING = {
 }
 
 REWARDS = {
-    "collision": -50,
-    "parked": 50,
-    "time_up": -50,
+    "collision": -5,
+    "parked": 20,
+    "time_up": -5,
 }
 
 pygame.init()
@@ -45,14 +45,27 @@ class Environment:
             (400, 180),
             (400, 140),
             (400, 100),
-            # (260, 220),
-            # (260, 180),
-            # (260, 140),
-            # (260, 100),
-            # (200, 340),
-            # (200, 300),
-            # (200, 140),
-            # (200, 100),
+            (260, 220),
+            (260, 180),
+            (260, 140),
+            (260, 100),
+            (200, 340),
+            (200, 300),
+            (200, 180),
+            (200, 140),
+            (200, 100),
+        ]
+        self.parking_spots = [
+            (400, 340),
+            (400, 300),
+            (400, 260),
+            (400, 220),
+            (400, 180),
+            (400, 140),
+            (400, 100),
+            (260, 180),
+            (260, 140),
+            (260, 100),
         ]
         self.max_dist = math.sqrt(WIDTH**2 + HEIGHT**2)
         self.car_x, self.car_y = 50, 250
@@ -101,7 +114,7 @@ class Environment:
             self.car_x = random.randrange(50, 100, 5)
             self.car_y = random.randrange(200, 300, 5)
             self.car_angle = random.randrange(0, 360)
-            self.parking_spot_x, self.parking_spot_y = random.choice(self.spots)
+            self.parking_spot_x, self.parking_spot_y = random.choice(self.parking_spots)
             self.obstacles = self.spots.copy()
             self.obstacles.remove((self.parking_spot_x, self.parking_spot_y))
             self.generate_obstacle_cars()
@@ -125,16 +138,12 @@ class Environment:
             self.window_opened = True
 
         self.screen.fill(GRAY)
-        pygame.draw.rect(
+        pygame.draw.circle(
             self.screen,
             GREEN,
-            (
-                self.parking_spot_x,
-                self.parking_spot_y,
-                self.car_agent.width,
-                self.car_agent.height,
-            ),
-            2,
+            (self.parking_spot_x+19, self.parking_spot_y+8),  # Center of the circle
+            16,  # Radius of the circle (adjust as needed)
+            3,   # Line thickness
         )
         for obstacle in self.obstacle_cars:
             pygame.draw.rect(self.screen, RED, obstacle)
@@ -208,7 +217,7 @@ class Environment:
         reward = 1 - diff / 180
         diff_normalized = diff / 180
         # return reward
-        return 1-diff_normalized
+        return -diff_normalized
 
 
     def generate_video_current_run(self):
@@ -492,41 +501,49 @@ class Environment:
                 "starting_point": starting_points["forward"],
                 "ending_point": end_points["forward"],
                 "min_dist": min_distances["forward"],
+                "angle_diff": self.car_agent.angle
             },
             "forward_right": {
                 "starting_point": starting_points["forward_right"],
                 "ending_point": end_points["forward_right"],
                 "min_dist": min_distances["forward_right"],
+                "angle_diff": self.car_agent.angle + 45
             },
             "right": {
                 "starting_point": starting_points["right"],
                 "ending_point": end_points["right"],
                 "min_dist": min_distances["right"],
+                "angle_diff": self.car_agent.angle + 90
             },
             "right_back": {
                 "starting_point": starting_points["right_back"],
                 "ending_point": end_points["right_back"],
                 "min_dist": min_distances["right_back"],
+                "angle_diff": self.car_agent.angle + 135
             },
             "back": {
                 "starting_point": starting_points["back"],
                 "ending_point": end_points["back"],
                 "min_dist": min_distances["back"],
+                "angle_diff": self.car_agent.angle + 180
             },
             "back_left": {
                 "starting_point": starting_points["back_left"],
                 "ending_point": end_points["back_left"],
                 "min_dist": min_distances["back_left"],
+                "angle_diff": self.car_agent.angle + 225
             },
             "left": {
                 "starting_point": starting_points["left"],
                 "ending_point": end_points["left"],
                 "min_dist": min_distances["left"],
+                "angle_diff": self.car_agent.angle + 270
             },
             "left_forward": {
                 "starting_point": starting_points["left_forward"],
                 "ending_point": end_points["left_forward"],
                 "min_dist": min_distances["left_forward"],
+                "angle_diff": self.car_agent.angle + 315
             },
         }
 
@@ -534,7 +551,7 @@ class Environment:
         return lidar_info
 
     def execute_move(self, action):
-        """Execute the given action, return (done, reward, next_state)."""
+        """Execute the given action, return (done, reward, next_state, parked)."""
         self.all_actions_current_run.append(action)
         # Update the car's state based on the action
         self.move_car(action)
@@ -548,9 +565,9 @@ class Environment:
         if self.check_collision():
             self.all_reward_current_run.append(REWARDS["collision"])
             self.all_angle_rewards.append(self.calculate_angle_reward())
-            if self.iteration_num % 5 == 0:
+            if self.iteration_num % 500 == 0:
                 self.generate_video_current_run()
-            return True, REWARDS["collision"], state
+            return True, REWARDS["collision"], state, False
 
         # Parking success
         if self.check_parking():
@@ -559,15 +576,15 @@ class Environment:
             self.all_angle_rewards.append(self.calculate_angle_reward())
             # if sum(self.all_reward_current_run) > 1120:
             self.generate_video_current_run()
-            return True, REWARDS["parked"], state
+            return True, REWARDS["parked"], state, True
 
         if self.total_moves > 1000:
             self.total_moves = 0
             self.all_reward_current_run.append(REWARDS["time_up"])
             self.all_angle_rewards.append(self.calculate_angle_reward())
-            if self.iteration_num % 5 == 0:
+            if self.iteration_num % 500 == 0:
                 self.generate_video_current_run()
-            return True, REWARDS["time_up"], state
+            return True, REWARDS["time_up"], state, False
 
         reward = 0.7*self.calculate_distance_reward() + 0.3*self.calculate_angle_reward()
 
@@ -575,7 +592,7 @@ class Environment:
         self.all_angle_rewards.append(self.calculate_angle_reward())
 
         # Default penalty for no progress
-        return False, reward, state
+        return False, reward, state, False
 
     def calc_car_distance(self, x, y):
         dy = self.car_agent.y - y
@@ -622,20 +639,21 @@ class Environment:
             eight_sides_distances.append(
                 eight_sides_distances_dic[direc]["min_dist"] / self.max_dist
             )
+            eight_sides_distances.append(
+                eight_sides_distances_dic[direc]["angle_diff"] % 360 / 360
+            )
 
         return [
-            self.parking_spot_x / WIDTH,
-            self.parking_spot_y / HEIGHT,
-            self.car_agent.x / WIDTH,
-            self.car_agent.y / HEIGHT,
-            self.car_agent.angle / 360,
-            self.car_agent.speed / self.car_agent.max_speed,
-            diff_angle,
-            relative_x/WIDTH,
-            relative_y/HEIGHT,
             distance_to_parking_spot/self.max_dist,
+            self.car_agent.angle / 360,
+            diff_angle,
+            self.car_agent.speed / self.car_agent.max_speed,
             *eight_sides_distances,
-            
+            # self.car_agent.x / WIDTH,
+            # self.car_agent.y / HEIGHT,
+            # self.parking_spot_x / WIDTH,
+            # self.parking_spot_y / HEIGHT,
+            # * obtalces_coordinates,
         ]
 
     def test_run(self, run_time_in_sec):

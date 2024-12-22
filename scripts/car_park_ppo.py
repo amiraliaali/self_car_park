@@ -1,7 +1,7 @@
 import numpy as np
 from torch import nn
 import torch
-from torch.optim import AdamW
+from torch.optim import AdamW, Adam
 from tqdm import tqdm
 import torch.nn.functional as F
 import environment as env
@@ -15,17 +15,21 @@ class PPOActorCritic(nn.Module):
             nn.ReLU(),
             nn.Linear(128, 256),
             nn.ReLU(),
-            nn.Linear(256, 64),
+            nn.Linear(256, 256),
+            nn.ReLU(),
+            nn.Linear(256, 128),
             nn.ReLU(),
         )
         self.actor = nn.Sequential(
-            nn.Linear(64, action_dim),
+            nn.Linear(128, action_dim),
             nn.Softmax(dim=-1),
         )
         self.critic = nn.Sequential(
             nn.Linear(state_dim, 128),
             nn.ReLU(),
-            nn.Linear(128, 64),
+            nn.Linear(128, 256),
+            nn.ReLU(),
+            nn.Linear(256, 64),
             nn.ReLU(),
             nn.Linear(64, 1),
         )
@@ -42,13 +46,13 @@ class CarPark:
         self.num_actions = len(env.ACTIONS_MAPPING)
         self.state_dim = len(self.environment_inst.get_current_state())
         self.model = PPOActorCritic(self.state_dim, self.num_actions)
-        self.optimizer = AdamW(self.model.parameters(), lr=0.0005)
+        self.optimizer = AdamW(self.model.parameters(), lr=0.00001)
         self.highest_reward = 0
-        self.eps_clip = 0.2
+        self.eps_clip = 0.4
 
     def save_model(self, path="/Users/amiraliaali/Documents/Coding/RL/cross_street/ppo_model.pth"):
         torch.save(self.model.state_dict(), path)
-        print(f"Model saved to {path}.")
+        # print(f"Model saved to {path}.")
 
     def load_model(self, path="/Users/amiraliaali/Documents/Coding/RL/cross_street/best_ppo_model.pth"):
         self.model.load_state_dict(torch.load(path))
@@ -63,7 +67,7 @@ class CarPark:
         action = action_dist.sample()
         return action.item(), action_dist.log_prob(action)
 
-    def train(self, episodes, gamma=0.99, update_every=5, save_best_model=True, ppo_epochs=4):
+    def train(self, episodes, gamma=0.99, update_every=5, save_best_model=True, ppo_epochs=8):
         stats = {"Loss": [], "Returns": []}
         progress_bar = tqdm(range(1, episodes + 1), desc="Training", leave=True)
 
@@ -73,10 +77,11 @@ class CarPark:
             state = self.environment_inst.env_reset()
             done = False
             ep_return = 0
+            parked = False
 
             while not done:
                 action, log_prob = self.select_action(state)
-                done, reward, next_state = self.environment_inst.execute_move(action)
+                done, reward, next_state, parked = self.environment_inst.execute_move(action)
 
                 memory.append((state, action, log_prob, reward, next_state, done))
                 state = next_state
@@ -87,9 +92,9 @@ class CarPark:
 
             memory = []
 
-            if save_best_model and ep_return > self.highest_reward:
+            if save_best_model and parked:
                 self.highest_reward = ep_return
-                self.save_model("/Users/amiraliaali/Documents/Coding/RL/cross_street/best_ppo_model.pth")
+                self.save_model(f"/Users/amiraliaali/Documents/Coding/RL/cross_street/training_output/ppo_model_{episode}.pth")
 
             stats["Returns"].append(ep_return)
 
@@ -98,7 +103,7 @@ class CarPark:
                 avg_return = np.mean(stats["Returns"][-update_every:])
                 progress_bar.set_description(f"Training (Avg Reward: {avg_return:.2f})")
 
-            if episode % 5 == 0:
+            if episode % 100 == 0:
                 self.plot_stats(stats, episode)
 
         return stats
@@ -155,19 +160,23 @@ class CarPark:
         fig, axs = plt.subplots(2, 1, figsize=(10, 8))
 
         # Plot Losses
-        axs[0].plot(stats["Loss"], label="Loss")
+        axs[0].plot(range(len(stats["Loss"])), stats["Loss"], label="Loss", color="blue", linewidth=1.5)
         axs[0].set_title("Loss Over Time")
         axs[0].set_xlabel("Training Step")
         axs[0].set_ylabel("Loss")
         axs[0].legend()
 
         # Plot Returns
-        axs[1].plot(stats["Returns"], label="Returns")
+        axs[1].plot(range(len(stats["Returns"])), stats["Returns"], label="Returns", color="green", linewidth=1.5)
         axs[1].set_title("Returns Over Episodes")
         axs[1].set_xlabel("Episode")
         axs[1].set_ylabel("Returns")
         axs[1].legend()
 
+        # Adjust layout
         plt.tight_layout()
-        fig.savefig(f"/Users/amiraliaali/Documents/Coding/RL/cross_street/training_output/loss_return_after_{episode_num}.png")
+
+        # Save figure
+        output_path = f"/Users/amiraliaali/Documents/Coding/RL/cross_street/training_output/loss_return_after_{episode_num}.png"
+        fig.savefig(output_path)
         plt.close(fig)
