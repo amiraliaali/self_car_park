@@ -15,8 +15,6 @@ class PPOActorCritic(nn.Module):
             nn.ReLU(),
             nn.Linear(128, 256),
             nn.ReLU(),
-            nn.Linear(256, 256),
-            nn.ReLU(),
             nn.Linear(256, 128),
             nn.ReLU(),
         )
@@ -27,9 +25,7 @@ class PPOActorCritic(nn.Module):
         self.critic = nn.Sequential(
             nn.Linear(state_dim, 128),
             nn.ReLU(),
-            nn.Linear(128, 256),
-            nn.ReLU(),
-            nn.Linear(256, 64),
+            nn.Linear(128, 64),
             nn.ReLU(),
             nn.Linear(64, 1),
         )
@@ -48,7 +44,7 @@ class CarPark:
         self.model = PPOActorCritic(self.state_dim, self.num_actions)
         self.optimizer = AdamW(self.model.parameters(), lr=0.00001)
         self.highest_reward = 0
-        self.eps_clip = 0.4
+        self.eps_clip = 0.5
 
     def save_model(self, path="/Users/amiraliaali/Documents/Coding/RL/cross_street/ppo_model.pth"):
         torch.save(self.model.state_dict(), path)
@@ -67,7 +63,7 @@ class CarPark:
         action = action_dist.sample()
         return action.item(), action_dist.log_prob(action)
 
-    def train(self, episodes, gamma=0.99, update_every=5, save_best_model=True, ppo_epochs=8):
+    def train(self, episodes, gamma=0.99, update_every=5, save_best_model=True, ppo_epochs=4):
         stats = {"Loss": [], "Returns": []}
         progress_bar = tqdm(range(1, episodes + 1), desc="Training", leave=True)
 
@@ -146,7 +142,7 @@ class CarPark:
             critic_loss = F.mse_loss(state_values.squeeze(), discounted_rewards)
 
             entropy_loss = dist.entropy().mean()
-            loss = actor_loss + 0.2 * critic_loss - 0.01 * entropy_loss
+            loss = actor_loss + 0.5 * critic_loss - 0.03 * entropy_loss
             current_ep_loss.append(loss.item())
 
             # Backpropagation

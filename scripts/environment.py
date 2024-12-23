@@ -16,9 +16,9 @@ ACTIONS_MAPPING = {
 }
 
 REWARDS = {
-    "collision": -5,
+    "collision": -20,
     "parked": 20,
-    "time_up": -5,
+    "time_up": -20,
 }
 
 pygame.init()
@@ -143,7 +143,7 @@ class Environment:
             GREEN,
             (self.parking_spot_x+19, self.parking_spot_y+8),  # Center of the circle
             16,  # Radius of the circle (adjust as needed)
-            3,   # Line thickness
+            5,   # Line thickness
         )
         for obstacle in self.obstacle_cars:
             pygame.draw.rect(self.screen, RED, obstacle)
@@ -644,15 +644,15 @@ class Environment:
             )
 
         return [
+            self.parking_spot_x / WIDTH,
+            self.parking_spot_y / HEIGHT,
+            self.car_agent.x / WIDTH,
+            self.car_agent.y / HEIGHT,
             distance_to_parking_spot/self.max_dist,
             self.car_agent.angle / 360,
             diff_angle,
-            self.car_agent.speed / self.car_agent.max_speed,
+            # self.car_agent.speed / self.car_agent.max_speed,
             *eight_sides_distances,
-            # self.car_agent.x / WIDTH,
-            # self.car_agent.y / HEIGHT,
-            # self.parking_spot_x / WIDTH,
-            # self.parking_spot_y / HEIGHT,
             # * obtalces_coordinates,
         ]
 
