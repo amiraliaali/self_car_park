@@ -17,8 +17,8 @@ ACTIONS_MAPPING = {
 
 REWARDS = {
     "collision": -20,
-    "parked": 20,
-    "time_up": -20,
+    "parked": 50,
+    "time_up": -5,
 }
 
 pygame.init()
@@ -586,10 +586,18 @@ class Environment:
                 self.generate_video_current_run()
             return True, REWARDS["time_up"], state, False
 
-        reward = 0.7*self.calculate_distance_reward() + 0.3*self.calculate_angle_reward()
+        reward = 0.5*self.calculate_distance_reward() + 0.5*self.calculate_angle_reward()
 
         self.all_reward_current_run.append(self.calculate_distance_reward())
         self.all_angle_rewards.append(self.calculate_angle_reward())
+
+        prev_distance = self.prev_distance if hasattr(self, 'prev_distance') else self.max_dist
+        current_distance = self.calc_car_distance(self.parking_spot_x, self.parking_spot_y)
+        if current_distance < prev_distance:
+            reward += 1  # Reward for getting closer
+        self.prev_distance = current_distance
+        reward -= 0.1  # Penalty for each step
+
 
         # Default penalty for no progress
         return False, reward, state, False

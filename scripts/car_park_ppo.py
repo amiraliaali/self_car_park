@@ -15,7 +15,9 @@ class PPOActorCritic(nn.Module):
             nn.ReLU(),
             nn.Linear(128, 256),
             nn.ReLU(),
-            nn.Linear(256, 128),
+            nn.Linear(256, 512),
+            nn.ReLU(),
+            nn.Linear(512, 128),
             nn.ReLU(),
         )
         self.actor = nn.Sequential(
@@ -24,6 +26,8 @@ class PPOActorCritic(nn.Module):
         )
         self.critic = nn.Sequential(
             nn.Linear(state_dim, 128),
+            nn.ReLU(),
+            nn.Linear(128, 128),
             nn.ReLU(),
             nn.Linear(128, 64),
             nn.ReLU(),
@@ -63,25 +67,26 @@ class CarPark:
         action = action_dist.sample()
         return action.item(), action_dist.log_prob(action)
 
-    def train(self, episodes, gamma=0.99, update_every=5, save_best_model=True, ppo_epochs=4):
+    def train(self, episodes, batch_size=4, gamma=0.95, update_every=5, save_best_model=True, ppo_epochs=8):
         stats = {"Loss": [], "Returns": []}
         progress_bar = tqdm(range(1, episodes + 1), desc="Training", leave=True)
 
         memory = []
 
         for episode in progress_bar:
-            state = self.environment_inst.env_reset()
-            done = False
-            ep_return = 0
-            parked = False
+            for i in range(batch_size):
+                state = self.environment_inst.env_reset()
+                done = False
+                ep_return = 0
+                parked = False
 
-            while not done:
-                action, log_prob = self.select_action(state)
-                done, reward, next_state, parked = self.environment_inst.execute_move(action)
+                while not done:
+                    action, log_prob = self.select_action(state)
+                    done, reward, next_state, parked = self.environment_inst.execute_move(action)
 
-                memory.append((state, action, log_prob, reward, next_state, done))
-                state = next_state
-                ep_return += reward
+                    memory.append((state, action, log_prob, reward, next_state, done))
+                    state = next_state
+                    ep_return += reward
 
             mean_loss = self.update(memory, gamma, ppo_epochs)
             stats["Loss"].append(mean_loss)
@@ -89,7 +94,6 @@ class CarPark:
             memory = []
 
             if save_best_model and parked:
-                self.highest_reward = ep_return
                 self.save_model(f"/Users/amiraliaali/Documents/Coding/RL/cross_street/training_output/ppo_model_{episode}.pth")
 
             stats["Returns"].append(ep_return)
@@ -142,7 +146,7 @@ class CarPark:
             critic_loss = F.mse_loss(state_values.squeeze(), discounted_rewards)
 
             entropy_loss = dist.entropy().mean()
-            loss = actor_loss + 0.5 * critic_loss - 0.03 * entropy_loss
+            loss = actor_loss + 0.2 * critic_loss - 0.04 * entropy_loss
             current_ep_loss.append(loss.item())
 
             # Backpropagation
