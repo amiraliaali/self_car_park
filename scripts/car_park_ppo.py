@@ -75,7 +75,7 @@ class CarPark:
 
         for episode in progress_bar:
             for i in range(batch_size):
-                state = self.environment_inst.env_reset()
+                state = self.environment_inst.env_reset(episode_num=episode, iteration_num=i)
                 done = False
                 ep_return = 0
                 parked = False
@@ -88,13 +88,14 @@ class CarPark:
                     state = next_state
                     ep_return += reward
 
+                if save_best_model and parked:
+                    self.save_model(f"/Users/amiraliaali/Documents/Coding/RL/cross_street/training_output/ppo_model_{episode}_{i}.pth")
+
             mean_loss = self.update(memory, gamma, ppo_epochs)
             stats["Loss"].append(mean_loss)
 
             memory = []
 
-            if save_best_model and parked:
-                self.save_model(f"/Users/amiraliaali/Documents/Coding/RL/cross_street/training_output/ppo_model_{episode}.pth")
 
             stats["Returns"].append(ep_return)
 

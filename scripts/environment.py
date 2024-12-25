@@ -106,7 +106,7 @@ class Environment:
             for (x, y) in self.obstacles
         ]
 
-    def env_reset(self, generate_video=False):
+    def env_reset(self, generate_video=False, episode_num=-1, iteration_num=-1):
         pygame.init()
         # self.generate_car(50, random.choice([100, 125, 150, 175, 200, 225, 250, 275, 300]))
         pygame.event.clear()
@@ -124,6 +124,8 @@ class Environment:
             self.all_angle_rewards = []
             self.lidar_info = []
             self.iteration_num += 1
+            self.episode_num = episode_num
+            self.episode_iteration_num = iteration_num
         self.car_agent.reset(self.car_x, self.car_y, self.car_angle)
         self.current_car_parking_distance = math.inf
         return self.get_current_state()
@@ -225,7 +227,7 @@ class Environment:
         frame_width, frame_height = WIDTH, HEIGHT
         fourcc = cv.VideoWriter_fourcc(*"H264")  # Codec for MP4
         out = cv.VideoWriter(
-            f"output_videos/{self.iteration_num}.mp4",
+            f"output_videos/{self.episode_num}_{self.episode_iteration_num}.mp4",
             fourcc,
             FPS,
             (frame_width, frame_height),
@@ -315,10 +317,10 @@ class Environment:
             cv.putText(frame, text, (190, 50), font, font_scale, color, 1)
 
             text = (
-                f"Iteration: {self.iteration_num}"  # Format reward to 2 decimal places
+                f"Ep_Iter: {self.episode_num}_{self.episode_iteration_num}"  # Format reward to 2 decimal places
             )
 
-            cv.putText(frame, text, (20, 25), font, font_scale, color, thickness)
+            cv.putText(frame, text, (20, 25), font, font_scale, color, 1)
 
             text = f"Tot. Rew.: {total_reward:.2f}"  # Format reward to 2 decimal places
 
@@ -326,11 +328,11 @@ class Environment:
 
             text = f"Car X: {self.car_agent.x:.2f}"  # Format reward to 2 decimal places
 
-            cv.putText(frame, text, (160, 25), font, font_scale, color, 1)
+            cv.putText(frame, text, (190, 25), font, font_scale, color, 1)
 
             text = f"Car Y: {self.car_agent.y:.2f}"  # Format reward to 2 decimal places
 
-            cv.putText(frame, text, (340, 25), font, font_scale, color, 1)
+            cv.putText(frame, text, (350, 25), font, font_scale, color, 1)
 
             out.write(frame)
 
@@ -565,7 +567,7 @@ class Environment:
         if self.check_collision():
             self.all_reward_current_run.append(REWARDS["collision"])
             self.all_angle_rewards.append(self.calculate_angle_reward())
-            if self.iteration_num % 500 == 0:
+            if self.episode_num % 500 == 0:
                 self.generate_video_current_run()
             return True, REWARDS["collision"], state, False
 
@@ -575,14 +577,15 @@ class Environment:
             self.all_reward_current_run.append(REWARDS["parked"])
             self.all_angle_rewards.append(self.calculate_angle_reward())
             # if sum(self.all_reward_current_run) > 1120:
-            self.generate_video_current_run()
+            if random.randrange(0, 3) == 0:
+                self.generate_video_current_run()
             return True, REWARDS["parked"], state, True
 
         if self.total_moves > 1000:
             self.total_moves = 0
             self.all_reward_current_run.append(REWARDS["time_up"])
             self.all_angle_rewards.append(self.calculate_angle_reward())
-            if self.iteration_num % 500 == 0:
+            if self.episode_num % 500 == 0:
                 self.generate_video_current_run()
             return True, REWARDS["time_up"], state, False
 
