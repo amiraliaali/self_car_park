@@ -67,8 +67,8 @@ class CarParkUI(CarPark):
 if __name__ == "__main__":
     cp = CarParkUI()
     print("Starting training...")
-    cp.train(episodes=10000)
+    cp.train(episodes=0)
     print("Training completed. Running test agent...")
-    # cp.load_model()
-    cp.save_model()
+    cp.load_model()
+    # cp.save_model()
     cp.show_test_agent()

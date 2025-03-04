@@ -49,24 +49,12 @@ class Environment:
             (260, 180),
             (260, 140),
             (260, 100),
-            (200, 340),
-            (200, 300),
+            (200, 220),
             (200, 180),
             (200, 140),
             (200, 100),
         ]
-        self.parking_spots = [
-            (400, 340),
-            (400, 300),
-            (400, 260),
-            (400, 220),
-            (400, 180),
-            (400, 140),
-            (400, 100),
-            (260, 180),
-            (260, 140),
-            (260, 100),
-        ]
+        self.parking_spots = self.spots
         self.max_dist = math.sqrt(WIDTH**2 + HEIGHT**2)
         self.car_x, self.car_y = 50, 250
         self.generate_car()
@@ -80,6 +68,7 @@ class Environment:
         self.all_reward_current_run = list()
         self.all_angle_rewards = list()
         self.lidar_info = list()
+        self.total_number_of_parked = 0
         
 
     def generate_car(self):
@@ -567,25 +556,29 @@ class Environment:
         if self.check_collision():
             self.all_reward_current_run.append(REWARDS["collision"])
             self.all_angle_rewards.append(self.calculate_angle_reward())
-            if self.episode_num % 500 == 0:
+            if self.episode_num % 2500 == 0:
+                print(f"Total number of parked: {self.total_number_of_parked}")
                 self.generate_video_current_run()
             return True, REWARDS["collision"], state, False
 
         # Parking success
         if self.check_parking():
-            print(f"parked succesfully. Reward: {REWARDS['parked']}")
+            # print(f"parked succesfully. Reward: {REWARDS['parked']}")
+            self.total_number_of_parked += 1
             self.all_reward_current_run.append(REWARDS["parked"])
             self.all_angle_rewards.append(self.calculate_angle_reward())
             # if sum(self.all_reward_current_run) > 1120:
-            if random.randrange(0, 3) == 0:
+            if self.episode_num % 2500 == 0:
+                print(f"Total number of parked: {self.total_number_of_parked}")
                 self.generate_video_current_run()
             return True, REWARDS["parked"], state, True
 
-        if self.total_moves > 1000:
+        if self.total_moves > 100:
             self.total_moves = 0
             self.all_reward_current_run.append(REWARDS["time_up"])
             self.all_angle_rewards.append(self.calculate_angle_reward())
-            if self.episode_num % 500 == 0:
+            if self.episode_num % 2500 == 0:
+                print(f"Total number of parked: {self.total_number_of_parked}")
                 self.generate_video_current_run()
             return True, REWARDS["time_up"], state, False
 
@@ -655,13 +648,15 @@ class Environment:
             )
 
         return [
-            self.parking_spot_x / WIDTH,
-            self.parking_spot_y / HEIGHT,
-            self.car_agent.x / WIDTH,
-            self.car_agent.y / HEIGHT,
-            distance_to_parking_spot/self.max_dist,
-            self.car_agent.angle / 360,
+            # self.car_agent.angle / 360,
             diff_angle,
+            # self.parking_spot_x / WIDTH,
+            # self.parking_spot_y / HEIGHT,
+            # self.car_agent.x / WIDTH,
+            # self.car_agent.y / HEIGHT,
+            distance_to_parking_spot/self.max_dist,
+            relative_x,
+            relative_y,
             # self.car_agent.speed / self.car_agent.max_speed,
             *eight_sides_distances,
             # * obtalces_coordinates,

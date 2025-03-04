@@ -6,18 +6,20 @@ from tqdm import tqdm
 import torch.nn.functional as F
 import environment as env
 import matplotlib.pyplot as plt
+import math
 
 class PPOActorCritic(nn.Module):
     def __init__(self, state_dim, action_dim):
         super(PPOActorCritic, self).__init__()
         self.actor_base = nn.Sequential(
             nn.Linear(state_dim, 128),
+            nn.LayerNorm(128),
             nn.ReLU(),
             nn.Linear(128, 256),
+            nn.LayerNorm(256),
             nn.ReLU(),
-            nn.Linear(256, 512),
-            nn.ReLU(),
-            nn.Linear(512, 128),
+            nn.Linear(256, 128),
+            nn.LayerNorm(128),
             nn.ReLU(),
         )
         self.actor = nn.Sequential(
@@ -26,10 +28,10 @@ class PPOActorCritic(nn.Module):
         )
         self.critic = nn.Sequential(
             nn.Linear(state_dim, 128),
-            nn.ReLU(),
-            nn.Linear(128, 128),
+            nn.LayerNorm(128),
             nn.ReLU(),
             nn.Linear(128, 64),
+            nn.LayerNorm(64),
             nn.ReLU(),
             nn.Linear(64, 1),
         )
@@ -46,15 +48,15 @@ class CarPark:
         self.num_actions = len(env.ACTIONS_MAPPING)
         self.state_dim = len(self.environment_inst.get_current_state())
         self.model = PPOActorCritic(self.state_dim, self.num_actions)
-        self.optimizer = AdamW(self.model.parameters(), lr=0.00001)
+        self.optimizer = AdamW(self.model.parameters(), lr=0.0001)
         self.highest_reward = 0
-        self.eps_clip = 0.5
+        self.eps_clip = 0.2
 
     def save_model(self, path="/Users/amiraliaali/Documents/Coding/RL/cross_street/ppo_model.pth"):
         torch.save(self.model.state_dict(), path)
         # print(f"Model saved to {path}.")
 
-    def load_model(self, path="/Users/amiraliaali/Documents/Coding/RL/cross_street/best_ppo_model.pth"):
+    def load_model(self, path="/Users/amiraliaali/Documents/Coding/RL/cross_street/ppo_model_least_loss.pth"):
         self.model.load_state_dict(torch.load(path))
         self.model.eval()
         print(f"Model loaded from {path}.")
@@ -67,9 +69,10 @@ class CarPark:
         action = action_dist.sample()
         return action.item(), action_dist.log_prob(action)
 
-    def train(self, episodes, batch_size=4, gamma=0.95, update_every=5, save_best_model=True, ppo_epochs=8):
+    def train(self, episodes, batch_size=1, gamma=0.95, update_every=5, save_best_model=False, ppo_epochs=4):
         stats = {"Loss": [], "Returns": []}
         progress_bar = tqdm(range(1, episodes + 1), desc="Training", leave=True)
+        least_loss = math.inf
 
         memory = []
 
@@ -88,11 +91,15 @@ class CarPark:
                     state = next_state
                     ep_return += reward
 
-                if save_best_model and parked:
-                    self.save_model(f"/Users/amiraliaali/Documents/Coding/RL/cross_street/training_output/ppo_model_{episode}_{i}.pth")
+                # if save_best_model and parked:
+                #     self.save_model(f"/Users/amiraliaali/Documents/Coding/RL/cross_street/training_output/ppo_model_{episode}_{i}.pth")
 
             mean_loss = self.update(memory, gamma, ppo_epochs)
             stats["Loss"].append(mean_loss)
+
+            if mean_loss < least_loss:
+                least_loss = mean_loss
+                self.save_model(f"/Users/amiraliaali/Documents/Coding/RL/cross_street/ppo_model_least_loss.pth")
 
             memory = []
 
@@ -104,7 +111,7 @@ class CarPark:
                 avg_return = np.mean(stats["Returns"][-update_every:])
                 progress_bar.set_description(f"Training (Avg Reward: {avg_return:.2f})")
 
-            if episode % 100 == 0:
+            if episode % 1000 == 0:
                 self.plot_stats(stats, episode)
 
         return stats
@@ -136,7 +143,7 @@ class CarPark:
             new_log_probs = dist.log_prob(actions.squeeze())
             ratios = torch.exp(new_log_probs - log_probs)
 
-            advantages = discounted_rewards - state_values.squeeze()
+            advantages = discounted_rewards - state_values.squeeze().detach()
             advantages = (advantages - advantages.mean()) / (advantages.std() + 1e-8)
 
             # Compute PPO losses
