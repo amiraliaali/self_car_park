@@ -38,6 +38,27 @@ FPS = 30
 class Environment:
     def __init__(self) -> None:
         self.spots = [
+            (450, 340),
+            (450, 300),
+            (450, 260),
+            (450, 220),
+            (450, 180),
+            (450, 140),
+            (450, 100),
+            (260, 340),
+            (260, 300),
+            (260, 220),
+            (260, 180),
+            (260, 140),
+            (260, 100),
+            (150, 340),
+            (150, 300),
+            (150, 220),
+            (150, 180),
+            (150, 140),
+            (150, 100),
+        ]
+        self.parking_spots = [
             (400, 340),
             (400, 300),
             (400, 260),
@@ -54,7 +75,6 @@ class Environment:
             (200, 140),
             (200, 100),
         ]
-        self.parking_spots = self.spots
         self.max_dist = math.sqrt(WIDTH**2 + HEIGHT**2)
         self.car_x, self.car_y = 50, 250
         self.generate_car()
@@ -103,8 +123,9 @@ class Environment:
             self.car_x = random.randrange(50, 100, 5)
             self.car_y = random.randrange(200, 300, 5)
             self.car_angle = random.randrange(0, 360)
-            self.parking_spot_x, self.parking_spot_y = random.choice(self.parking_spots)
-            self.obstacles = self.spots.copy()
+            rand_int = random.randint(8, 12)
+            self.obstacles = random.sample(self.spots, rand_int)
+            self.parking_spot_x, self.parking_spot_y = random.choice(self.obstacles)
             self.obstacles.remove((self.parking_spot_x, self.parking_spot_y))
             self.generate_obstacle_cars()
             self.total_moves = 0
@@ -573,7 +594,7 @@ class Environment:
                 self.generate_video_current_run()
             return True, REWARDS["parked"], state, True
 
-        if self.total_moves > 100:
+        if self.total_moves > 200:
             self.total_moves = 0
             self.all_reward_current_run.append(REWARDS["time_up"])
             self.all_angle_rewards.append(self.calculate_angle_reward())

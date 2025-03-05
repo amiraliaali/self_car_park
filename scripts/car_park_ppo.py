@@ -1,7 +1,7 @@
 import numpy as np
 from torch import nn
 import torch
-from torch.optim import AdamW, Adam
+from torch.optim import AdamW, Adam, lr_scheduler
 from tqdm import tqdm
 import torch.nn.functional as F
 import environment as env
@@ -48,7 +48,8 @@ class CarPark:
         self.num_actions = len(env.ACTIONS_MAPPING)
         self.state_dim = len(self.environment_inst.get_current_state())
         self.model = PPOActorCritic(self.state_dim, self.num_actions)
-        self.optimizer = AdamW(self.model.parameters(), lr=0.0001)
+        self.optimizer = AdamW(self.model.parameters(), lr=0.001)
+        self.scheduler = lr_scheduler.StepLR(self.optimizer, step_size=1, gamma=0.5)
         self.highest_reward = 0
         self.eps_clip = 0.2
 
@@ -56,7 +57,7 @@ class CarPark:
         torch.save(self.model.state_dict(), path)
         # print(f"Model saved to {path}.")
 
-    def load_model(self, path="/Users/amiraliaali/Documents/Coding/RL/cross_street/ppo_model_least_loss.pth"):
+    def load_model(self, path="/Users/amiraliaali/Documents/Coding/RL/cross_street/ppo_model.pth"):
         self.model.load_state_dict(torch.load(path))
         self.model.eval()
         print(f"Model loaded from {path}.")
@@ -77,6 +78,10 @@ class CarPark:
         memory = []
 
         for episode in progress_bar:
+            if episode % 7500 == 0:
+                self.scheduler.step()
+                print(f"Updated learning rate: {self.optimizer.param_groups[0]['lr']}")
+
             for i in range(batch_size):
                 state = self.environment_inst.env_reset(episode_num=episode, iteration_num=i)
                 done = False
@@ -91,8 +96,8 @@ class CarPark:
                     state = next_state
                     ep_return += reward
 
-                # if save_best_model and parked:
-                #     self.save_model(f"/Users/amiraliaali/Documents/Coding/RL/cross_street/training_output/ppo_model_{episode}_{i}.pth")
+                if save_best_model and parked:
+                    self.save_model(f"/Users/amiraliaali/Documents/Coding/RL/cross_street/training_output/ppo_model_{episode}_{i}.pth")
 
             mean_loss = self.update(memory, gamma, ppo_epochs)
             stats["Loss"].append(mean_loss)
