@@ -4,13 +4,13 @@
 Here are some video from during the training of our agent trying to reach its goal.
 
 <div style="display: flex; gap: 10px;">
-  <img src="https://github.com/amiraliaali/cross_street/blob/main/readme_media/training_time.gif" width="700" height="400" />
+  <img src="https://github.com/amiraliaali/cross_street/blob/main/readme_media/training_time.gif" width="900" height="500" />
 </div>
 
 And here  some video from during the test time of our agent trying to reach its goal.
 
 <div style="display: flex; gap: 10px;">
-  <img src="https://github.com/amiraliaali/cross_street/blob/main/readme_media/test_time.gif" width="500" height="400" />
+  <img src="https://github.com/amiraliaali/cross_street/blob/main/readme_media/test_time.gif" width="700" height="575" />
 </div>
 
 ## Overview
