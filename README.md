@@ -57,6 +57,9 @@ The PPO model consists of:
 - **Critic Network**: Estimates state values for advantage calculation.
 - **Layer Normalization & ReLU activations** to improve training stability.
 
+## Results
+All the result videos can be found under ```readme_media```. Including high quality videos.
+
 ## Future Improvements
 - Experiment with different reward shaping strategies.
 - Extend the environment with dynamic obstacles.
