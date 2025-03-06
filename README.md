@@ -4,8 +4,13 @@
 Here are some video from during the training of our agent trying to reach its goal.
 
 <div style="display: flex; gap: 10px;">
-  <img src="https://github.com/amiraliaali/maze_solver/blob/main/output_videos/output_video.gif" width="400" height="400" />
-  <img src="https://github.com/amiraliaali/maze_solver/blob/main/output_videos/output_video_1.gif" width="400" height="400" />
+  <img src="https://github.com/amiraliaali/cross_street/blob/main/readme_media/training_time.gif" width="500" height="400" />
+</div>
+
+And here  some video from during the test time of our agent trying to reach its goal.
+
+<div style="display: flex; gap: 10px;">
+  <img src="https://github.com/amiraliaali/cross_street/blob/main/readme_media/test_time.gif" width="500" height="400" />
 </div>
 
 ## Overview
