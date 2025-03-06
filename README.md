@@ -1,5 +1,13 @@
 # Reinforcement Learning for Autonomous Car Navigation
 
+## Test Output GIFs
+Here are some video from during the training of our agent trying to reach its goal.
+
+<div style="display: flex; gap: 10px;">
+  <img src="https://github.com/amiraliaali/maze_solver/blob/main/output_videos/output_video.gif" width="400" height="400" />
+  <img src="https://github.com/amiraliaali/maze_solver/blob/main/output_videos/output_video_1.gif" width="400" height="400" />
+</div>
+
 ## Overview
 This project implements a reinforcement learning approach using Proximal Policy Optimization (PPO) to train an autonomous agent (a free-moving car) to navigate a space with obstacles and reach a predefined goal spot without collisions. The agent learns through trial and error, improving its navigation strategy over time.
 
