@@ -49,9 +49,9 @@ class CarPark:
         self.state_dim = len(self.environment_inst.get_current_state())
         self.model = PPOActorCritic(self.state_dim, self.num_actions)
         self.optimizer = AdamW(self.model.parameters(), lr=0.001)
-        self.scheduler = lr_scheduler.StepLR(self.optimizer, step_size=1, gamma=0.5)
+        self.scheduler = lr_scheduler.StepLR(self.optimizer, step_size=1, gamma=0.75)
         self.highest_reward = 0
-        self.eps_clip = 0.2
+        self.eps_clip = 0.3
 
     def save_model(self, path="/Users/amiraliaali/Documents/Coding/RL/cross_street/ppo_model.pth"):
         torch.save(self.model.state_dict(), path)
@@ -70,7 +70,7 @@ class CarPark:
         action = action_dist.sample()
         return action.item(), action_dist.log_prob(action)
 
-    def train(self, episodes, batch_size=1, gamma=0.95, update_every=5, save_best_model=False, ppo_epochs=4):
+    def train(self, episodes, batch_size=4, gamma=0.98, update_every=5, save_best_model=True, ppo_epochs=4):
         stats = {"Loss": [], "Returns": []}
         progress_bar = tqdm(range(1, episodes + 1), desc="Training", leave=True)
         least_loss = math.inf
@@ -96,7 +96,7 @@ class CarPark:
                     state = next_state
                     ep_return += reward
 
-                if save_best_model and parked:
+                if save_best_model and parked and episode % 2500 == 0:
                     self.save_model(f"/Users/amiraliaali/Documents/Coding/RL/cross_street/training_output/ppo_model_{episode}_{i}.pth")
 
             mean_loss = self.update(memory, gamma, ppo_epochs)

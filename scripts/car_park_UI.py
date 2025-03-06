@@ -69,6 +69,6 @@ if __name__ == "__main__":
     print("Starting training...")
     cp.train(episodes=0)
     print("Training completed. Running test agent...")
-    cp.load_model()
+    cp.load_model("/Users/amiraliaali/Documents/Coding/RL/cross_street/training_output/ppo_model_42925_0.pth")
     # cp.save_model()
     cp.show_test_agent()
