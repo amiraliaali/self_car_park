@@ -1,2 +1,5 @@
 training_output/*
 output_videos/*
+readme_media/test_time_videos/looped_gifs
+readme_media/training_videos/looped_gifs
+save_gifs_in_grid.txt
