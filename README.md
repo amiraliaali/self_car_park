@@ -57,15 +57,6 @@ The PPO model consists of:
 - **Critic Network**: Estimates state values for advantage calculation.
 - **Layer Normalization & ReLU activations** to improve training stability.
 
-## Results
-The training process logs rewards and losses. You can visualize training progress using the generated loss/return graphs:
-```sh
-📂 training_output
-   ├── ppo_model_least_loss.pth
-   ├── ppo_model_<episode>_<batch>.pth
-   ├── loss_return_after_<episode>.png
-```
-
 ## Future Improvements
 - Experiment with different reward shaping strategies.
 - Extend the environment with dynamic obstacles.
