@@ -14,6 +14,13 @@
             "request": "launch",
             "program": "${workspaceFolder}/scripts/car_park_UI.py",
             "console": "integratedTerminal"
+        },
+        {
+            "name": "Test",
+            "type": "debugpy",
+            "request": "launch",
+            "program": "${workspaceFolder}/test.py",
+            "console": "integratedTerminal"
         }
     ]
 }
