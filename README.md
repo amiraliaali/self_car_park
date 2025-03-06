@@ -38,12 +38,12 @@ The environment consists of:
 ├── output_videos/  # Videos from during the training and test time
 ├── readme_media/   # All the media used to be shown in the readme, like result videos etc.
 ├── scripts/
-        ├── environment.py      # Custom environment for car navigation
-        ├── replay_memory.py    # A script for the replay memory
-        ├── car.py              # Class definition for the car
-        ├── car_park_UI.py      # For running the training
-        ├── car_park_a2c.py     # Training script for a simple actor2critic
-        └── car_park_ppo.py     # Training script for PPO
+  ├── environment.py      # Custom environment for car navigation
+  ├── replay_memory.py    # A script for the replay memory
+  ├── car.py              # Class definition for the car
+  ├── car_park_UI.py      # For running the training
+  ├── car_park_a2c.py     # Training script for a simple actor2critic
+  └── car_park_ppo.py     # Training script for PPO
 └── training_output # A plot for the loss and rewards, plus three optimal weights 
 
 ```
