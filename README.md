@@ -58,6 +58,12 @@ The PPO model consists of:
 - **Layer Normalization & ReLU activations** to improve training stability.
 
 ## Results
+Here is the plot for the reward and the loss through time.
+
+<div style="display: flex; gap: 10px;">
+  <img src="https://github.com/amiraliaali/self_car_park/blob/main/training_output/loss_return_after_46000.png" width="800" height="700" />
+</div>
+
 All the result videos can be found under ```readme_media```. Including high quality videos.
 
 ## Future Improvements
